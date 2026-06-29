@@ -183,12 +183,115 @@ const MovieSlider: React.FC<{ movies: IMovie[] }> = ({ movies }) => {
     hideTooltip();
   };
 
+  // Card dùng chung cho cả 2 nhánh (Swiper và grid tĩnh)
+  const renderCard = (movie: IMovie) => (
+    <Link href={`/phim/${movie.slug}`} className="flex flex-col h-full">
+      <div
+        className="relative"
+        onMouseEnter={(e) => handleMouseActivity(movie, e)}
+        onMouseMove={(e) => handleMouseActivity(movie, e)}
+        onMouseLeave={handleMouseLeave}
+        onPointerMove={(e) => handleMouseActivity(movie, e)}
+      >
+        <Image
+          width={300}
+          height={200}
+          src={movie.thumb_url || movie.poster_url}
+          alt={movie.name}
+          style={{ objectFit: "cover" }}
+          loading="lazy"
+          className="rounded-lg  lg:rounded-xl w-full max-h-[200px] h-full"
+        />
+        <div className="absolute bottom-0 left-4 flex">
+          {movie.lang && movie.lang.map((lang, i) => {
+            const isFirst = i === 0;
+
+            let content;
+            const baseClasses = " text-[11px] px-2 py-1";
+            let specificClasses;
+
+            switch (lang) {
+              case 0: // Phụ đề
+                specificClasses = `text-white bg-gray-500 ${isFirst ? 'rounded-tl' : ''} ${!isFirst ? 'rounded-tr' : ''}`;
+                content = 'Phụ đề';
+                break;
+              case 1: // Thuyết Minh
+                specificClasses = `bg-white text-black ${isFirst ? 'rounded-tl' : ''} ${!isFirst ? 'rounded-tr' : ''}`;
+                content = 'Thuyết Minh';
+                break;
+              case 2: // Lồng tiếng (Trường hợp còn lại)
+                specificClasses = `text-white bg-green-600 ${isFirst ? 'rounded-tl' : ''} ${!isFirst ? 'rounded-tr' : ''}`;
+                content = 'Lồng tiếng';
+                break;
+              default:
+                return null;
+            }
+
+            return (
+              <span
+                key={`lang-${i}`}
+                className={`${baseClasses} ${specificClasses}`}
+              >
+                {content}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="md:px-4 mt-2">
+        <h3 className="text-sm font-semibold truncate text-white">
+          {movie.name}
+        </h3>
+        <p className="text-xs mt-1.5 text-gray-400">{movie.origin_name}</p>
+      </div>
+    </Link>
+  );
+
+  // Khi ít phim, Swiper tính sai chiều rộng slide (co về ~0px) -> render grid tĩnh.
+  // Khi đủ phim (>6, trùng ngưỡng bật loop) mới dùng carousel.
+  const useCarousel = movies.length > 6;
+
+  const tooltipPortal =
+    isClient && currentMovie && currentPosition
+      ? createPortal(
+          <MovieListHover
+            movie={currentMovie}
+            position={currentPosition}
+            isVisible={isVisible}
+            onMouseEnter={() => {
+              clearPendingActionTimer();
+            }}
+            onMouseLeave={hideTooltip}
+          />,
+          document.body
+        )
+      : null;
+
+  if (!useCarousel) {
+    return (
+      <>
+        <div className="relative w-full">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xmin-[1840px]:grid-cols-6 gap-[17px]">
+            {movies.map((movie) => (
+              <div key={movie._id}>{renderCard(movie)}</div>
+            ))}
+          </div>
+          {tooltipPortal}
+        </div>
+      </>
+    );
+  }
+
   return (<>
     <div className="relative w-full flex justify-center items-center">
       <Swiper
         modules={[Navigation]}
         spaceBetween={17}
         loop={movies.length > 6}
+        watchOverflow={true}
+        observer={true}
+        observeParents={true}
         navigation={{
           prevEl: prevRef.current,
           nextEl: nextRef.current,
@@ -232,68 +335,7 @@ const MovieSlider: React.FC<{ movies: IMovie[] }> = ({ movies }) => {
       >
         {movies.map((movie) => (
           <SwiperSlide key={movie._id}>
-            <Link href={`/phim/${movie.slug}`} className="flex flex-col h-full">
-              <div
-                className="relative"
-                onMouseEnter={(e) => handleMouseActivity(movie, e)}
-                onMouseMove={(e) => handleMouseActivity(movie, e)}
-                onMouseLeave={handleMouseLeave}
-                onPointerMove={(e) => handleMouseActivity(movie, e)}
-              >
-                <Image
-                  width={300}
-                  height={200}
-                  src={movie.thumb_url || movie.poster_url}
-                  alt={movie.name}
-                  style={{ objectFit: "cover" }}
-                  loading="lazy"
-
-                  className="rounded-lg  lg:rounded-xl w-full max-h-[200px] h-full"
-                />
-                <div className="absolute bottom-0 left-4 flex">
-                  {movie.lang && movie.lang.map((lang, i) => {
-                    const isFirst = i === 0;
-
-                    let content;
-                    const baseClasses = " text-[11px] px-2 py-1";
-                    let specificClasses;
-
-                    switch (lang) {
-                      case 0: // Phụ đề
-                        specificClasses = `text-white bg-gray-500 ${isFirst ? 'rounded-tl' : ''} ${!isFirst ? 'rounded-tr' : ''}`;
-                        content = 'Phụ đề';
-                        break;
-                      case 1: // Thuyết Minh
-                        specificClasses = `bg-white text-black ${isFirst ? 'rounded-tl' : ''} ${!isFirst ? 'rounded-tr' : ''}`;
-                        content = 'Thuyết Minh';
-                        break;
-                      case 2: // Lồng tiếng (Trường hợp còn lại)
-                        specificClasses = `text-white bg-green-600 ${isFirst ? 'rounded-tl' : ''} ${!isFirst ? 'rounded-tr' : ''}`;
-                        content = 'Lồng tiếng';
-                        break;
-                      default:
-                        return null;
-                    }
-
-                    return (
-                      <span
-                        key={`lang-${i}`}
-                        className={`${baseClasses} ${specificClasses}`}
-                      >
-                        {content}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="md:px-4 mt-2">
-                <h3 className="text-sm font-semibold truncate text-white">
-                  {movie.name}
-                </h3>
-                <p className="text-xs mt-1.5 text-gray-400">{movie.origin_name}</p>
-              </div>
-            </Link>
+            {renderCard(movie)}
           </SwiperSlide>
         ))}
       </Swiper>
@@ -316,18 +358,7 @@ const MovieSlider: React.FC<{ movies: IMovie[] }> = ({ movies }) => {
         <icon.ArrowRight className="text-black text-lg lg:text-xl" />
       </div>
 
-      {isClient && currentMovie && currentPosition && createPortal(
-        <MovieListHover
-          movie={currentMovie}
-          position={currentPosition}
-          isVisible={isVisible}
-          onMouseEnter={() => {
-            clearPendingActionTimer();
-          }}
-          onMouseLeave={hideTooltip}
-        />,
-        document.body
-      )}
+      {tooltipPortal}
     </div></>
   );
 };
