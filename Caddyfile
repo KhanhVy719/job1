@@ -7,6 +7,7 @@
 #   api1.tranhungdaocfs.site  -> VPS
 #   cdn.tranhungdaocfs.site   -> VPS
 #   core.tranhungdaocfs.site  -> VPS
+#   admin.tranhungdaocfs.site -> VPS
 
 # Email dùng cho Let's Encrypt (đổi nếu cần)
 {
@@ -36,4 +37,10 @@ cdn.tranhungdaocfs.site {
 core.tranhungdaocfs.site {
 	encode zstd gzip
 	reverse_proxy server:8001
+}
+
+# Admin dashboard (admin, Next.js)
+admin.tranhungdaocfs.site {
+	encode zstd gzip
+	reverse_proxy admin:3001
 }

@@ -17,6 +17,7 @@ services:
       - caddy_config:/config
     depends_on:
       - client
+      - admin
       - webapi
       - cdn
       - server
