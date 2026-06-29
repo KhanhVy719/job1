@@ -248,9 +248,10 @@ const MovieSlider: React.FC<{ movies: IMovie[] }> = ({ movies }) => {
     </Link>
   );
 
-  // Khi ít phim, Swiper tính sai chiều rộng slide (co về ~0px) -> render grid tĩnh.
-  // Khi đủ phim (>6, trùng ngưỡng bật loop) mới dùng carousel.
-  const useCarousel = movies.length > 6;
+  // Khi quá ít phim (<=3), Swiper tính sai chiều rộng slide (co về ~0px) -> render grid tĩnh.
+  // Từ 4 phim trở lên dùng carousel để hiện nút chuyển (prev/next) như section US-UK.
+  // Loop vẫn chỉ bật khi >6 phim để tránh bug nhân bản slide làm co width.
+  const useCarousel = movies.length >= 4;
 
   const tooltipPortal =
     isClient && currentMovie && currentPosition
