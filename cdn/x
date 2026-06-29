@@ -1,0 +1,602 @@
+import axios from "axios";
+import { Request, Response } from "express";
+import { URL } from "url";
+import crypto from "crypto";
+import rateLimit from "express-rate-limit";
+import http from "http";
+import https from "https";
+import NodeCache from "node-cache";
+import Episode from "../../model/Episode";
+import { localTokenService, ILocalTokenPayload } from "./services/LocalTokenService";
+import { decodeFingerprint } from "../../../utils/server-fp";
+
+// --- CONFIG & CACHE ---
+const WHITELISTED_ORIGINS = [
+  "http://localhost:3000",
+  "https://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://127.0.0.1:3000",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
+// Cache để theo dõi Rate Limiting cho từng Session ID
+// TTL: 1 giây, Check Period: 0.2 giây
+const segmentRateCache = new NodeCache({ stdTTL: 1, checkperiod: 0.2 });
+const MAX_SEGMENTS_PER_SECOND = 10; // Giới hạn 10 Segment mỗi giây cho mỗi phiên
+
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 100 });
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+  rejectUnauthorized: false,
+});
+
+const axiosInstance = axios.create({
+  httpAgent,
+  httpsAgent,
+  timeout: 20000,
+  responseType: "stream",
+  decompress: false,
+});
+
+const epCache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
+const keyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: "Key request limit exceeded",
+});
+
+// Key dùng để mã hóa tham số s (Nên để trong env)
+const QUERY_ENCRYPTION_KEY = crypto.scryptSync(
+  process.env.SECRET_KEY || "default_secret",
+  "salt",
+  32
+);
+const IV_LENGTH = 16;
+
+interface StreamRequest extends Request {
+  params: {
+    encryptedToken: string;
+    encodedKeyUrl?: string;
+    encodedUrl?: string;
+    [key: string]: any;
+  };
+  query: {
+    [key: string]: any;
+  };
+}
+
+interface DecodedFingerprint {
+  episode_id?: string;
+  [k: string]: any;
+}
+
+class StreamController {
+  constructor() {
+    this.handleStream = this.handleStream.bind(this);
+    this.streamSegment = this.streamSegment.bind(this);
+    this.streamKey = this.streamKey.bind(this);
+  }
+
+  // --- HELPERS BẢO MẬT & MÃ HÓA ---
+
+  private generateSalt(length: number = 8): string {
+    return crypto.randomBytes(length).toString("hex");
+  }
+
+  private getClientIp(req: Request): string {
+    const xForwardedFor = req.headers["x-forwarded-for"];
+    if (typeof xForwardedFor === "string")
+      return xForwardedFor.split(",")[0].trim();
+    return (req.socket && req.socket.remoteAddress) || "0.0.0.0";
+  }
+
+  // Mã hóa payload (Fingerprint + Expiry) thành chuỗi hex an toàn cho URL
+  private encryptSecurePayload(data: any, ttlSeconds: number): string {
+    const payload = JSON.stringify({
+      d: data, // Data gốc (Fingerprint)
+      e: Date.now() + ttlSeconds * 1000, // Hạn sử dụng của link M3U8 này
+    });
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv(
+      "aes-256-cbc",
+      QUERY_ENCRYPTION_KEY,
+      iv
+    );
+    let encrypted = cipher.update(payload, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    return iv.toString("hex") + ":" + encrypted;
+  }
+
+  // Giải mã payload và kiểm tra hết hạn
+  private decryptSecurePayload(encryptedString: string): any | null {
+    try {
+      const parts = encryptedString.split(":");
+      if (parts.length !== 2) return null; // Không phải dạng mã hóa, có thể là raw fingerprint
+
+      const iv = Buffer.from(parts[0], "hex");
+      const encryptedText = parts[1];
+      const decipher = crypto.createDecipheriv(
+        "aes-256-cbc",
+        QUERY_ENCRYPTION_KEY,
+        iv
+      );
+      let decrypted = decipher.update(encryptedText, "hex", "utf8");
+      decrypted += decipher.final("utf8");
+
+      const json = JSON.parse(decrypted);
+
+      // Kiểm tra thời gian hết hạn (Time Limit Check)
+      if (json.e && Date.now() > json.e) {
+        return "EXPIRED";
+      }
+      return json.d; // Trả về data gốc
+    } catch (e) {
+      return null; // Lỗi giải mã -> Có thể là raw fingerprint hoặc rác
+    }
+  }
+
+  private validateRequest(req: Request, encryptedToken: string): ILocalTokenPayload | null {
+    const payload = localTokenService.decrypt(encryptedToken);
+    if (!payload) return null;
+    if (process.env.NODE_ENV === "production") {
+      // if (this.getClientIp(req) !== payload.ip) return null; // Tùy chọn: kiểm tra IP
+    }
+    const currentUaHash = localTokenService.hashUserAgent(
+      req.headers["user-agent"] || ""
+    );
+    if (currentUaHash !== payload.ua) return null;
+    if (Date.now() > payload.exp) return null;
+    return payload;
+  }
+
+  private async getVideoData(
+    episodeId: string,
+    videoIndex: number
+  ): Promise<{ url: string } | null> {
+    const cacheKey = `ep_${episodeId}_${videoIndex}`;
+    const cachedData = epCache.get<{ url: string }>(cacheKey);
+    if (cachedData) return cachedData;
+    try {
+      const episode: any = await Episode.findById(episodeId, {
+        videos: 1,
+      }).lean();
+      if (!episode || !episode.videos[videoIndex]) return null;
+      const videoData = { url: episode.videos[videoIndex].url };
+      epCache.set(cacheKey, videoData);
+      return videoData;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Tạo Query String ký tên cho Segment (.ts)
+  private signSegmentUrl(
+    path: string,
+    secret: string,
+    reqContext: { ip: string; ua: string; host: string; proto: string },
+    userContext: { uid: string; eid: string }
+  ): string {
+    const now = Date.now();
+    // GIẢM TTL SEGMENT XUỐNG 1 PHÚT để chặn tải xuống dài
+    const expires = now + 1 * 60 * 1000; 
+    const salt = this.generateSalt(6);
+
+    const params: Record<string, string> = {
+      e: expires.toString(),
+      st: now.toString(),
+      uid: Buffer.from(userContext.uid).toString("base64url"),
+      eid: Buffer.from(userContext.eid).toString("base64url"),
+      h: Buffer.from(reqContext.host).toString("base64url"),
+      p: reqContext.proto,
+      ip: Buffer.from(reqContext.ip).toString("base64url"),
+      ua: reqContext.ua.substring(0, 12),
+      salt: salt,
+      sv: "n1-sg",
+      m: "secure_pb",
+      q: "v2",
+      tag: this.generateSalt(4),
+    };
+
+    const sortedKeys = Object.keys(params).sort();
+    const dataToSign =
+      path + "|" + sortedKeys.map((key) => `${key}=${params[key]}`).join("|");
+    const signature = crypto
+      .createHmac("sha256", secret)
+      .update(dataToSign)
+      .digest("hex");
+    const queryParams = sortedKeys
+      .map((key) => `${key}=${params[key]}`)
+      .join("&");
+    return `${queryParams}&s=${signature}`;
+  }
+
+  private verifySegmentSignature(
+    path: string,
+    secret: string,
+    query: any,
+    reqContext: { ip: string; ua: string; host: string; proto: string }
+  ): boolean {
+    try {
+      const signature = query.s;
+      if (!signature) return false;
+      if (Date.now() > parseInt(query.e)) return false;
+      const queryIp = Buffer.from(query.ip, "base64url").toString("utf-8");
+      if (queryIp !== reqContext.ip) return false;
+      const paramsToCheck: Record<string, string> = { ...query };
+      delete paramsToCheck.s;
+      const sortedKeys = Object.keys(paramsToCheck).sort();
+      const dataToVerify =
+        path +
+        "|" +
+        sortedKeys.map((key) => `${key}=${paramsToCheck[key]}`).join("|");
+      const expectedSig = crypto
+        .createHmac("sha256", secret)
+        .update(dataToVerify)
+        .digest("hex");
+      return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSig)
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  public async handleStream(req: StreamRequest, res: Response): Promise<any> {
+    const { encryptedToken } = req.params;
+
+    const { encodedUrl, r } = req.query;
+    const referer = req.headers.referer || "";
+    const originHost = req.headers.host || "";
+
+    let isTrustedReferer = false;
+
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        // Tạo Origin từ referer request
+        const refererOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
+
+        // Kiểm tra chính xác xem Origin có trong danh sách trắng không
+        if (WHITELISTED_ORIGINS.includes(refererOrigin)) {
+          isTrustedReferer = true;
+        }
+      } catch (e) {
+        // Referer không hợp lệ (URL malformed)
+        isTrustedReferer = false;
+      }
+    }
+
+    // THÊM KIỂM TRA PHỤ: Nếu Referer không hợp lệ, ít nhất nó phải đến từ chính host hiện tại
+    if (!isTrustedReferer && referer && referer.includes(originHost)) {
+      isTrustedReferer = true;
+    }
+
+    if (!isTrustedReferer) {
+      console.warn(`[Security] Referer blocked: ${referer}`);
+      return res.status(403).end();
+    }
+    const signatureHeader = req.headers["x-signature"];
+    const s = Array.isArray(signatureHeader)
+      ? signatureHeader[0]
+      : signatureHeader;
+
+    const payload = this.validateRequest(req, encryptedToken);
+    if (!payload) return res.status(403).end();
+
+    try {
+      if (!s)
+        return res.status(403).json({ message: "Missing Signature Header" });
+
+      // 1. XỬ LÝ FINGERPRINT & TIME LIMIT CHO M3U8
+      let rawFingerprintStr = s as string;
+
+      const decryptedData = this.decryptSecurePayload(rawFingerprintStr);
+
+      if (decryptedData === "EXPIRED") {
+        // Link M3U8 đã hết hạn (quá thời gian cho phép load playlist con)
+        return res.status(410).json({ message: "Playlist link expired" });
+      } else if (decryptedData) {
+        rawFingerprintStr = decryptedData;
+      }
+
+      let decoded: DecodedFingerprint | null = null;
+      try {
+        decoded = await decodeFingerprint(JSON.parse(atob(rawFingerprintStr)));
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid fingerprint" });
+      }
+
+      console.log(decoded);
+      if (decoded?.is_f12_open || decoded?.is_bot_check_runtime) {
+        return res.status(403).json({ message: "Security check failed" });
+      }
+
+      // 2. XÁC ĐỊNH URL GỐC
+      let originalBaseUrl = "";
+      let targetUrl = "";
+      const subPlaylistUrl = encodedUrl || r;
+
+      if (subPlaylistUrl) {
+        try {
+          targetUrl = Buffer.from(
+            subPlaylistUrl as string,
+            "base64url"
+          ).toString("utf-8");
+        } catch (e) {
+          return res.status(400).end();
+        }
+      } else {
+        // [TRƯỜNG HỢP 2]: Request Master Playlist
+        const video = await this.getVideoData(payload.id, payload.index);
+        if (!video || !video.url) return res.status(404).end();
+        targetUrl = video.url;
+      }
+
+      try {
+        originalBaseUrl = new URL(".", targetUrl).href;
+      } catch (e) {
+        return res.status(500).end();
+      }
+
+      const m3u8Response = await axiosInstance.get(targetUrl, {
+        responseType: "text",
+        headers: { "User-Agent": "Mozilla/5.0", Referer: originalBaseUrl },
+      });
+
+      let m3u8Content: string = m3u8Response.data;
+
+      // Base Proxy URL
+      const protocol = (req.headers["x-forwarded-proto"] ||
+        req.protocol) as string;
+      const host = req.get("host") || "";
+      const baseProxyUrl = `${protocol}://${host}/cdn/stream/${encryptedToken}`;
+
+      const clientIp = this.getClientIp(req);
+      const uaHash = localTokenService.hashUserAgent(
+        req.headers["user-agent"] || ""
+      );
+      const reqContext = { ip: clientIp, ua: uaHash, host, proto: protocol };
+      const userContext = { uid: payload.sid || "anon", eid: payload.id }; // Dùng SID làm UID nếu cần
+
+      m3u8Content = m3u8Content.replace(
+        /#EXT-X-KEY:METHOD=([^,]+),URI="([^"]+)"/g,
+        (match, method, keyUrl) => {
+          try {
+            const absoluteKeyUrl = keyUrl.startsWith("http")
+              ? keyUrl
+              : new URL(keyUrl, originalBaseUrl).href;
+            const encodedKeyUrl =
+              Buffer.from(absoluteKeyUrl).toString("base64url");
+            return `#EXT-X-KEY:METHOD=${method},URI="${baseProxyUrl}/key/${encodedKeyUrl}"`;
+          } catch (e) {
+            return match;
+          }
+        }
+      );
+
+      m3u8Content = m3u8Content.replace(/^(?!#)(.+)$/gm, (line) => {
+        const urlRaw = line.trim();
+        if (!urlRaw) return line;
+
+        try {
+          const absoluteUrl = urlRaw.startsWith("http")
+            ? urlRaw
+            : new URL(urlRaw, originalBaseUrl).href;
+          const isPlaylist =
+            absoluteUrl.includes(".m3u8") || req.query.type === "master";
+
+          if (isPlaylist) {
+            const encodedPlaylistUrl =
+              Buffer.from(absoluteUrl).toString("base64url");
+
+            // --- TẠO MÃ HÓA GIỚI HẠN THỜI GIAN CHO M3U8 CON ---
+            const timeLimitedS = this.encryptSecurePayload(
+              rawFingerprintStr,
+              5 // GIẢM TTL XUỐNG 5 GIÂY
+            );
+
+            return `${baseProxyUrl}/master.bin?encodedUrl=${encodedPlaylistUrl}&s=${timeLimitedS}`;
+          } else {
+            const encodedSegUrl =
+              Buffer.from(absoluteUrl).toString("base64url");
+            const queryString = this.signSegmentUrl(
+              absoluteUrl,
+              payload.secret,
+              reqContext,
+              userContext
+            );
+            return `${baseProxyUrl}/blob/${encodedSegUrl}.bin?${queryString}`;
+          }
+        } catch (e) {
+          return line;
+        }
+      });
+
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      res.setHeader(
+        "Cache-Control",
+        "private, no-cache, no-store, must-revalidate"
+      );
+      return res.send(m3u8Content);
+    } catch (e: any) {
+      console.error(`[Stream Error] ${req.path}:`, e.message);
+      return res.status(502).end();
+    }
+  }
+
+  public async streamSegment(req: StreamRequest, res: Response) {
+    const { encryptedToken } = req.params;
+    const referer = req.headers.referer || "";
+    const originHost = req.headers.host || "";
+
+    let isTrustedReferer = false;
+
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        // Tạo Origin từ referer request
+        const refererOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
+
+        // Kiểm tra chính xác xem Origin có trong danh sách trắng không
+        if (WHITELISTED_ORIGINS.includes(refererOrigin)) {
+          isTrustedReferer = true;
+        }
+      } catch (e) {
+        // Referer không hợp lệ (URL malformed)
+        isTrustedReferer = false;
+      }
+    }
+
+    // THÊM KIỂM TRA PHỤ: Nếu Referer không hợp lệ, ít nhất nó phải đến từ chính host hiện tại
+    if (!isTrustedReferer && referer && referer.includes(originHost)) {
+      isTrustedReferer = true;
+    }
+
+    if (!isTrustedReferer) {
+      console.warn(`[Security] Referer blocked: ${referer}`);
+      return res.status(403).end();
+    }
+    let encodedUrlParam = req.params.encodedUrl || req.query.encodedUrl;
+
+    if (!encodedUrlParam && req.params[0]) {
+      encodedUrlParam = req.params[0]; // Catch-all param
+    }
+
+    if (
+      encodedUrlParam &&
+      typeof encodedUrlParam === "string" &&
+      encodedUrlParam.endsWith(".bin")
+    ) {
+      encodedUrlParam = encodedUrlParam.slice(0, -4);
+    }
+
+    const encodedUrl = encodedUrlParam as string;
+
+    if (!encodedUrl) return res.destroy();
+
+    const payload = this.validateRequest(req, encryptedToken);
+    if (!payload) return res.destroy();
+
+    // === BƯỚC QUAN TRỌNG: RATE LIMITING THEO SESSION ID (SID) ===
+    const sessionId = payload.sid;
+    if (!sessionId) {
+        // Token phải có SID, nếu không có nghĩa là Token không hợp lệ cho Stream
+        return res.status(403).json({ message: "Missing session identifier" }).end();
+    }
+    
+    // Tăng bộ đếm cho Session ID. NodeCache sẽ reset sau 1 giây
+    let requests = segmentRateCache.get<number>(sessionId) || 0;
+    requests++;
+
+    if (requests > MAX_SEGMENTS_PER_SECOND) {
+        // Cảnh báo: Tải quá nhanh, chặn luồng tải đa luồng
+        console.warn(`[RateLimit] Session ${sessionId} exceeded ${MAX_SEGMENTS_PER_SECOND} segments/s`);
+        return res.status(429).json({ message: "Too many segment requests" }).end();
+    }
+    
+    // Cập nhật bộ đếm trong cache (TTL = 1 giây)
+    // Nếu bạn muốn chặn IP vi phạm vĩnh viễn, bạn cần thêm logic vào đây
+    segmentRateCache.set(sessionId, requests);
+
+    // Anti-Download
+    if ((req.headers["accept"] || "").includes("text/html"))
+      return res.destroy();
+
+    try {
+      const originalUrl = Buffer.from(encodedUrl, "base64url").toString(
+        "utf-8"
+      );
+
+      const reqContext = {
+        ip: this.getClientIp(req),
+        ua: localTokenService.hashUserAgent(req.headers["user-agent"] || ""),
+        host: req.get("host") || "",
+        proto: (req.headers["x-forwarded-proto"] || req.protocol) as string,
+      };
+
+      if (
+        !this.verifySegmentSignature(
+          originalUrl,
+          payload.secret,
+          req.query,
+          reqContext
+        )
+      ) {
+        return res.status(403).end();
+      }
+
+      const headers: any = {
+        "User-Agent": "Mozilla/5.0",
+        Referer: new URL(".", originalUrl).href,
+        Accept: "*/*",
+      };
+      if (req.headers.range) headers["Range"] = req.headers.range;
+
+      const response = await axiosInstance({
+        url: originalUrl,
+        method: "GET",
+        headers: headers,
+        validateStatus: (status) => status >= 200 && status < 400,
+      });
+
+      res.setHeader("Content-Type", "application/octet-stream");
+
+      if (req.headers.range) {
+        const headersToForward = [
+          "content-length",
+          "content-range",
+          "accept-ranges",
+        ];
+        headersToForward.forEach((h) => {
+          if (response.headers[h]) res.setHeader(h, response.headers[h]);
+        });
+        res.status(response.status); // Giữ status 206 Partial Content
+      } else {
+        // Không có Range request: Loại bỏ Content-Length
+        if (response.headers["content-length"]) {
+          res.removeHeader("Content-Length");
+        }
+        res.status(200); // Đảm bảo status là 200 OK
+      }
+
+      res.setHeader("Cache-Control", "public, max-age=3600");
+
+      const headersToForward = ["content-range", "accept-ranges"];
+      headersToForward.forEach((h) => {
+        if (response.headers[h]) res.setHeader(h, response.headers[h]);
+      });
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.status(response.status);
+      response.data.pipe(res);
+      response.data.on("error", () => res.destroy());
+    } catch (err) {
+      res.destroy();
+    }
+  }
+
+  public async streamKey(req: StreamRequest, res: Response) {
+    keyLimiter(req, res, async () => {
+      const { encryptedToken, encodedKeyUrl } = req.params;
+      const payload = this.validateRequest(req, encryptedToken);
+      if (!payload) return res.status(403).end();
+      try {
+        const originalKeyUrl = Buffer.from(
+          encodedKeyUrl as string,
+          "base64url"
+        ).toString("utf-8");
+        const response = await axiosInstance.get(originalKeyUrl, {
+          responseType: "arraybuffer",
+          headers: { "User-Agent": "Mozilla/5.0", Referer: originalKeyUrl },
+        });
+        res.send(response.data);
+      } catch (e) {
+        res.status(404).end();
+      }
+    });
+  }
+}
+
+export default new StreamController();

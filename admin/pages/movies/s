@@ -1,0 +1,942 @@
+import React, { useEffect, useState, useRef } from 'react';
+import Link from "next/link";
+import Image from "next/image";
+import SimpleBar from 'simplebar-react';
+import 'simplebar-react/dist/simplebar.min.css';
+import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+
+const LANGUAGES = [
+    { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
+    { code: 'en', name: 'Tiếng Anh', flag: '🇺🇸' },
+    { code: 'zh', name: 'Tiếng Trung', flag: '🇨🇳' },
+    { code: 'ko', name: 'Tiếng Hàn', flag: '🇰🇷' },
+    { code: 'ja', name: 'Tiếng Nhật', flag: '🇯🇵' },
+    { code: 'th', name: 'Tiếng Thái', flag: '🇹🇭' },
+    { code: 'es', name: 'Tiếng Tây Ban Nha', flag: '🇪🇸' },
+    { code: 'fr', name: 'Tiếng Pháp', flag: '🇫🇷' },
+    { code: 'ru', name: 'Tiếng Nga', flag: '🇷🇺' },
+    { code: 'de', name: 'Tiếng Đức', flag: '🇩🇪' },
+];
+
+// --- HELPER: CHUYỂN ĐỔI GIÂY SANG HH:MM:SS ---
+const secondsToHms = (d: number | string) => {
+  d = Number(d);
+  const h = Math.floor(d / 3600);
+  const m = Math.floor((d % 3600) / 60);
+  const s = Math.floor(d % 60);
+
+  const hDisplay = h > 0 ? h + ":" : "";
+  const mDisplay = m.toString().padStart(2, '0') + ":";
+  const sDisplay = s.toString().padStart(2, '0');
+  return hDisplay + mDisplay + sDisplay;
+};
+
+// --- INTERFACE ---
+interface BackendVideo {
+  server_name: string;
+  url: string;
+  type: string; 
+  quality: string;
+}
+
+interface BackendEpisode {
+  _id: string;
+  name: string;
+  episode_number: number;
+  season_number: number;
+  videos: BackendVideo[];
+  type: string;
+  duration: number; 
+  skip_intro: { start: number; end: number };
+  skip_outro: { start: number; end: number };
+  subtitles?: any[]; 
+}
+
+interface BackendMovie {
+  _id: string;
+  name: string;
+  origin_name: string;
+  tmdb: {
+    id: string;
+    type: string;
+    vote_average: number;
+  };
+  total_seasons?: number;
+}
+
+interface ApiResponse {
+  status: boolean;
+  data: {
+    movie: BackendMovie;
+    episodes: BackendEpisode[];
+  };
+}
+
+// Interface cho 1 item phụ đề
+interface SubtitleItem {
+    lang: string;  // Mã ngôn ngữ (vi, en...)
+    label: string; // Tên Server (VD: Server VIP, Vietsub gốc...)
+    type: 'upload' | 'import';
+    value: string | File; 
+    fileName?: string; 
+}
+
+interface Episode {
+  id: string;
+  name: string;
+  part: string;
+  
+  videos: BackendVideo[]; 
+
+  server: string;   
+  type: string;     
+  quality: string;  
+
+  duration: string; 
+  skip_intro_start: string;
+  skip_intro_end: string;
+  skip_outro_start: string;
+  skip_outro_end: string;
+  
+  subtitles: SubtitleItem[]; 
+}
+
+const Upload: React.FC = () => {
+  const [type, setType] = useState(0); 
+  const [isLoading, setIsLoading] = useState(false); 
+
+  // --- STATE RIÊNG CHO PHẦN PHỤ ĐỀ ---
+  const [subMethod, setSubMethod] = useState<0 | 1>(0); // 0: Upload, 1: Import
+  const [tempSubLang, setTempSubLang] = useState('vi'); // Mặc định Tiếng Việt
+  const [tempSubLabel, setTempSubLabel] = useState(''); // Label server
+  const [tempSubUrl, setTempSubUrl] = useState('');
+  const [tempSubFile, setTempSubFile] = useState<File | null>(null);
+
+  // --- STATE CẤU HÌNH PHIM ---
+  const [movieConfig, setMovieConfig] = useState({
+    title: '',
+    tmdbId: '',
+    server: ''
+  });
+
+  const [parts, setParts] = useState<string[]>(['Phim lẻ']); 
+  const [episodes, setEpisodes] = useState<Episode[]>([]); 
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isAddingNewServer, setIsAddingNewServer] = useState(false);
+
+  // Form data
+  const [formData, setFormData] = useState({
+    name: '',
+    part: 'Phim lẻ',
+    server: '',
+    type: '0', 
+    quality: '',
+    duration: '',
+    skip_intro_start: '',
+    skip_intro_end: '',
+    skip_outro_start: '',
+    skip_outro_end: '',
+    subtitles: [] as SubtitleItem[], 
+  });
+
+  const mapTypeToValue = (typeStr: string) => {
+    if (typeStr === 'thuyetminh') return '1';
+    if (typeStr === 'longtieng') return '2';
+    return '0'; 
+  };
+
+  const filteredEpisodes = episodes.filter(ep => ep.part === formData.part);
+  const currentSelectedEpisode = episodes.find(e => e.id === selectedId);
+
+  // --- LOGIC FORMAT THỜI GIAN ---
+  const handleBlurTime = (field: keyof typeof formData, isDurationInput: boolean) => {
+    let value = formData[field];
+    if (typeof value !== 'string' || !value || value.includes(':')) return;
+    const num = parseInt(value, 10);
+    if (isNaN(num)) return;
+    const totalSeconds = isDurationInput ? num * 60 : num;
+    const formattedTime = secondsToHms(totalSeconds);
+    const newFormData: any = { ...formData, [field]: formattedTime };
+    setFormData(newFormData);
+    if (selectedId) {
+        setEpisodes(prev => prev.map(ep =>
+            ep.id === selectedId ? { ...ep, [field]: formattedTime } : ep
+        ));
+    }
+  };
+
+  // --- LOGIC PHỤ ĐỀ (THÊM/XÓA) ---
+  const handleAddSubtitle = () => {
+      // Validate
+      if (!tempSubLabel.trim()) {
+          alert("Vui lòng nhập tên Server phụ đề (VD: Server 1)");
+          return;
+      }
+      if (subMethod === 1 && !tempSubUrl.trim()) {
+          alert("Vui lòng nhập URL phụ đề");
+          return;
+      }
+      if (subMethod === 0 && !tempSubFile) {
+          alert("Vui lòng chọn file phụ đề");
+          return;
+      }
+
+      const newSub: SubtitleItem = {
+          lang: tempSubLang,
+          label: tempSubLabel,
+          type: subMethod === 0 ? 'upload' : 'import',
+          value: subMethod === 0 ? tempSubFile! : tempSubUrl,
+          fileName: subMethod === 0 ? tempSubFile?.name : undefined
+      };
+
+      const updatedSubtitles = [...formData.subtitles, newSub];
+      setFormData(prev => ({...prev, subtitles: updatedSubtitles}));
+
+      if (selectedId) {
+          setEpisodes(prev => prev.map(ep => 
+              ep.id === selectedId ? {...ep, subtitles: updatedSubtitles} : ep
+          ));
+      }
+
+      // Reset fields
+      setTempSubUrl('');
+      setTempSubFile(null);
+      // Giữ lại Lang và Label để nhập tiếp cho nhanh nếu cần
+  };
+
+  const handleRemoveSubtitle = (index: number) => {
+      const updatedSubtitles = formData.subtitles.filter((_, i) => i !== index);
+      setFormData(prev => ({...prev, subtitles: updatedSubtitles}));
+      if (selectedId) {
+          setEpisodes(prev => prev.map(ep => 
+              ep.id === selectedId ? {...ep, subtitles: updatedSubtitles} : ep
+          ));
+      }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+          setTempSubFile(e.target.files[0]);
+      }
+  };
+
+  // --- LOGIC GỌI API ---
+  const fetchTMDBData = async () => {
+    if (!movieConfig.tmdbId.trim()) return;
+
+    setIsLoading(true);
+    try {  
+      const res = await axiosInstance.get(API_ENDPOINTS.movie.tmdb(movieConfig.tmdbId));
+      const responseData: ApiResponse = res.data || res;
+
+      if (responseData.status && responseData.data) {
+        const { movie, episodes: backendEpisodes } = responseData.data;
+
+        const movieTitle = movie.name || movie.origin_name || "";
+        setMovieConfig(prev => ({ ...prev, title: movieTitle }));
+
+        const uniqueSeasons = Array.from(new Set(backendEpisodes.map(ep => `Phần ${ep.season_number}`)));
+        let newParts = ['Phim lẻ'];
+        if (uniqueSeasons.length > 0) {
+            newParts = uniqueSeasons.sort();
+            setParts(newParts);
+            setFormData(prev => ({ ...prev, part: newParts[0] }));
+        } else {
+             setParts(['Phim lẻ']);
+             setFormData(prev => ({ ...prev, part: 'Phim lẻ' }));
+        }
+
+        const uniqueEpisodesMap = new Map<string, Episode>();
+        
+        backendEpisodes.forEach((ep) => {
+            if (!uniqueEpisodesMap.has(ep._id)) {
+                let displayName = ep.name;
+                if (!displayName || displayName === movie.name || displayName === movie.origin_name) {
+                    displayName = `Tập ${ep.episode_number}`;
+                }
+
+                const firstVideo = ep.videos && ep.videos.length > 0 ? ep.videos[0] : null;
+
+                const formattedDuration = ep.duration ? secondsToHms(ep.duration * 60) : ""; 
+                const skipIntroStart = ep.skip_intro?.start ? secondsToHms(ep.skip_intro.start) : "";
+                const skipIntroEnd = ep.skip_intro?.end ? secondsToHms(ep.skip_intro.end) : "";
+                const skipOutroStart = ep.skip_outro?.start ? secondsToHms(ep.skip_outro.start) : "";
+                const skipOutroEnd = ep.skip_outro?.end ? secondsToHms(ep.skip_outro.end) : "";
+
+                uniqueEpisodesMap.set(ep._id, {
+                    id: ep._id,
+                    name: displayName, 
+                    part: `Phần ${ep.season_number}`,
+                    videos: ep.videos || [],
+                    server: firstVideo ? firstVideo.server_name : "",
+                    type: firstVideo ? mapTypeToValue(firstVideo.type) : "0",
+                    quality: firstVideo ? firstVideo.quality : "",
+                    duration: formattedDuration,
+                    skip_intro_start: skipIntroStart,
+                    skip_intro_end: skipIntroEnd,
+                    skip_outro_start: skipOutroStart,
+                    skip_outro_end: skipOutroEnd,
+                    subtitles: [] 
+                });
+            }
+        });
+
+        setEpisodes(Array.from(uniqueEpisodesMap.values()));
+
+      } else {
+        alert("Không tìm thấy dữ liệu phim!");
+      }
+
+    } catch (error) {
+      console.error("Error fetching Data:", error);
+      alert("Lỗi khi lấy thông tin phim!");
+      setParts(['Phim lẻ']);
+      setMovieConfig(prev => ({ ...prev, title: '' }));
+      setEpisodes([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectEpisode = (id: string | null) => {
+    setSelectedId(id);
+    setIsAddingNewServer(false); 
+
+    if (id) {
+      const ep = episodes.find(e => e.id === id);
+      if (ep) {
+        setFormData({ 
+            name: ep.name, 
+            part: ep.part, 
+            server: ep.server, 
+            type: ep.type,     
+            quality: ep.quality,
+            duration: ep.duration,
+            skip_intro_start: ep.skip_intro_start,
+            skip_intro_end: ep.skip_intro_end,
+            skip_outro_start: ep.skip_outro_start,
+            skip_outro_end: ep.skip_outro_end,
+            subtitles: ep.subtitles || [],
+        });
+      }
+    } else {
+      setFormData({ 
+          name: '', 
+          part: formData.part || 'Phim lẻ', 
+          server: '',
+          type: '0',
+          quality: '',
+          duration: '',
+          skip_intro_start: '',
+          skip_intro_end: '',
+          skip_outro_start: '',
+          skip_outro_end: '',
+          subtitles: [],
+      });
+    }
+  };
+
+  const handleInputChange = (field: keyof typeof formData, value: string) => {
+    let newFormData: any = { ...formData, [field]: value };
+
+    if (field === 'server') {
+        if (value === 'Thêm Mới') {
+            setIsAddingNewServer(true);
+            newFormData.server = ''; 
+        } else if (selectedId && !isAddingNewServer) {
+            const currentEp = episodes.find(e => e.id === selectedId);
+            if (currentEp) {
+                const selectedVideo = currentEp.videos.find(v => v.server_name === value);
+                if (selectedVideo) {
+                    newFormData.type = mapTypeToValue(selectedVideo.type);
+                    newFormData.quality = selectedVideo.quality;
+                    setEpisodes(prev => prev.map(ep => 
+                        ep.id === selectedId ? { 
+                            ...ep, 
+                            server: value,
+                            type: newFormData.type,
+                            quality: newFormData.quality
+                        } : ep
+                    ));
+                }
+            }
+        }
+    }
+
+    setFormData(newFormData);
+
+    if (selectedId) {
+      setEpisodes(prev => prev.map(ep =>
+        ep.id === selectedId ? { ...ep, [field]: value } : ep
+      ));
+    } else {
+      if (field === 'name' && value.trim() !== '') {
+        const newId = Date.now().toString();
+        const newEpisode: Episode = {
+          id: newId,
+          name: value,
+          part: newFormData.part,
+          videos: [], 
+          server: newFormData.server,
+          type: newFormData.type,
+          quality: newFormData.quality,
+          duration: newFormData.duration,
+          skip_intro_start: newFormData.skip_intro_start,
+          skip_intro_end: newFormData.skip_intro_end,
+          skip_outro_start: newFormData.skip_outro_start,
+          skip_outro_end: newFormData.skip_outro_end,
+          subtitles: newFormData.subtitles,
+        };
+        setEpisodes(prev => [...prev, newEpisode]);
+        setSelectedId(newId);
+      }
+    }
+  };
+
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  const handleDragStart = (index: number) => { dragItem.current = index; };
+  const handleDragEnter = (index: number) => { dragOverItem.current = index; };
+
+  const handleDragEnd = () => {
+    const draggedIdx = dragItem.current; 
+    const overIdx = dragOverItem.current;
+
+    if (draggedIdx !== null && overIdx !== null && draggedIdx !== overIdx) {
+      const itemBeingDragged = filteredEpisodes[draggedIdx];
+      const itemBeingOver = filteredEpisodes[overIdx];
+      const realSrcIndex = episodes.findIndex(e => e.id === itemBeingDragged.id);
+      const realDestIndex = episodes.findIndex(e => e.id === itemBeingOver.id);
+
+      if (realSrcIndex !== -1 && realDestIndex !== -1) {
+          const _episodes = [...episodes];
+          const [removedItem] = _episodes.splice(realSrcIndex, 1);
+          const newDestIndex = _episodes.findIndex(e => e.id === itemBeingOver.id);
+          _episodes.splice(newDestIndex, 0, removedItem);
+          setEpisodes(_episodes);
+      }
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
+  const handleDelete = () => {
+    if (selectedId) {
+      setEpisodes(prev => prev.filter(ep => ep.id !== selectedId));
+      handleSelectEpisode(null);
+    }
+  };
+
+  const enableAddServerMode = () => {
+      setIsAddingNewServer(true);
+      setFormData(prev => ({ ...prev, server: '' })); 
+  };
+
+  const cancelAddServerMode = () => {
+      setIsAddingNewServer(false);
+      if (selectedId) {
+          const ep = episodes.find(e => e.id === selectedId);
+          if (ep) handleInputChange('server', ep.server);
+      } else {
+          handleInputChange('server', '');
+      }
+  };
+
+  return (
+    <>
+      <div className='px-3 lg:px-5 xl:px-8 py-5 '>
+        <div className='text-xl font-semibold'>Đăng tải phim</div>
+        <div className='text-base mt-1 text-gray-400'>Upload video từ file hoặc import từ URL</div>
+
+        <div className='grid grid-cols-1 mt-6 lg:grid-cols-10 gap-5 h-full '>
+          <div className='lg:col-span-3 '>
+            <div className='border border-gay-300 px-5 py-3 rounded-md h-full'>
+              <div className='text-lg font-semibold'>Tải video</div>
+              <div className='text-sm mt-1 text-gray-400'>Chọn phương thức upload video</div>
+              <div className='bg-gray-500/10 rounded-lg mt-4 p-1 flex items-center space-x-2'>
+                <button className={`flex items-center w-full text-sm justify-center py-2 font-medium space-x-2 ${type == 0 ? "bg-white text-black" : "text-gray-400"} rounded-lg`} onClick={() => setType(0)} >
+                  <i className="fa-regular fa-upload"></i>
+                  <span>Upload video</span>
+                </button>
+                <button className={`flex items-center w-full text-sm justify-center py-2 font-medium space-x-2 ${type == 1 ? "bg-white text-black" : "text-gray-400"} rounded-lg`} onClick={() => setType(1)}>
+                  <i className="fa-regular fa-link"></i>
+                  <span>Import video</span>
+                </button>
+              </div>
+
+              <div className='mt-3'>
+                {type == 0 ? (<>
+                  <div className='border-2 border-dashed border-gray-300 rounded-lg p-6 flex items-center justify-center flex-col '>
+                    <i className="fa-regular fa-cloud-arrow-up text-5xl text-gray-500"></i>
+                    <button className='text-white mt-3 rounded-lg bg-black px-4 py-2.5 font-medium text-sm'>
+                      Chọn file video
+                    </button>
+                    <p className='mt-2.5 text-[13px] text-gray-400'>
+                      MP4 ,MOV,AVI,MKV,WEBM
+                    </p>
+                  </div>
+                </>) : (<>
+                  <div className='mt-4'>
+                    <input type="text" className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' placeholder='https://domain.com/abc/media/video.mp4' />
+                    <button className='text-white w-full mt-3 rounded-lg bg-black px-4 py-2.5 font-medium text-sm'>
+                      Chọn
+                    </button>
+                  </div>
+                </>)}
+              </div>
+            </div>
+          </div>
+          <div className='lg:col-span-7'>
+            <div className='border border-gay-300 px-5 py-3 rounded-md h-full'>
+              <div className='text-lg font-semibold'>Cấu hình upload</div>
+              <div className='text-sm mt-1 text-gray-400'>Thiếp lập các tùy chọn xử lý video</div>
+              <div className='text-[15px] my-5 font-semibold'>Thông tin cơ bản</div>
+              <div className='grid grid-cols-1 lg:grid-cols-2 gap-5 '>
+                <div className='col-span-1 lg:col-span-2'>
+                  <label className='font-medium '>Tên Phim</label>
+                  <div className='mt-2'>
+                    <input 
+                        type="text" 
+                        value={movieConfig.title}
+                        onChange={(e) => setMovieConfig({...movieConfig, title: e.target.value})}
+                        className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' 
+                        placeholder='Tên phim sẽ tự động hiển thị...' 
+                    />
+                  </div>
+                </div>
+
+                <div className='col-span-1'>
+                  <label className='font-medium '>ID TMDB</label>
+                  <div className='mt-2 relative'>
+                    <input 
+                        type="text" 
+                        value={movieConfig.tmdbId}
+                        onChange={(e) => setMovieConfig({...movieConfig, tmdbId: e.target.value})}
+                        onBlur={fetchTMDBData} 
+                        onKeyDown={(e) => e.key === 'Enter' && fetchTMDBData()} 
+                        disabled={isLoading}
+                        className={`px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg ${isLoading ? 'bg-gray-100 text-gray-500' : ''}`} 
+                        placeholder='Nhập ID rồi nhấn Enter...' 
+                    />
+                    {isLoading && (
+                        <div className="absolute right-3 top-3">
+                            <i className="fa-solid fa-spinner fa-spin text-gray-500"></i>
+                        </div>
+                    )}
+                  </div>
+                </div>
+                <div className='col-span-1'>
+                  <label className='font-medium '>Server Lưu trữ </label>
+                  <div className='mt-2'>
+                    <select
+                      className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg'
+                    >
+                      <option value="">Tiktok</option>
+                      <option value="2">Google Drive</option>
+                      <option value="3">CloudFlare</option>
+                      <option value="4">ASW Cloud</option>
+                      <option value="5">Local Cloud</option>
+                      <option value="5">Nhúng Iframe</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className='grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5'>
+
+                <div className='col-span-1 space-y-3'>
+                  <div>
+                    <label className='font-medium'>Chọn phần <span className='text-gray-500'>(Lấy từ TMDB)</span></label>
+                    <div className='mt-2'>
+                      <select
+                        value={formData.part}
+                        onChange={(e) => handleInputChange('part', e.target.value)}
+                        className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg'
+                      >
+                        {parts.map((p, index) => (
+                             <option key={index} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className='font-medium'>Tên Tập</label>
+                    <div className='mt-2'>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg'
+                        placeholder={selectedId ? 'Sửa tên tập...' : 'Nhập để thêm tập mới ngay...'}
+                      />
+                    </div>
+                  </div>
+                  <div className='grid grid-cols-1 lg:grid-cols-2 gap-5 mt-8'>
+                    <div className='col-span-1 lg:col-span-2'>
+                      <label className='font-medium '>Thời lượng video <span className='text-xs text-gray-400 font-normal'>(Nhập số phút -&gt; tự đổi ra giờ)</span></label>
+                      <div className='mt-2'>
+                        <input 
+                            type="text" 
+                            value={formData.duration}
+                            onChange={(e) => handleInputChange('duration', e.target.value)}
+                            onBlur={() => handleBlurTime('duration', true)} 
+                            className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' 
+                            placeholder='1:10:00' 
+                        />
+                      </div>
+                    </div>
+                    <div className='col-span-1'>
+                      <label className='font-medium '>Bỏ qua Giới thiệu (Start)</label>
+                      <div className='mt-2'>
+                        <input 
+                            type="text" 
+                            value={formData.skip_intro_start}
+                            onChange={(e) => handleInputChange('skip_intro_start', e.target.value)}
+                            onBlur={() => handleBlurTime('skip_intro_start', false)} 
+                            className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' 
+                            placeholder='0' 
+                        />
+                      </div>
+                    </div>
+
+                    <div className='col-span-1'>
+                      <label className='font-medium '>Bỏ qua kết thúc (Start)</label>
+                      <div className='mt-2'>
+                        <input 
+                            type="text" 
+                            value={formData.skip_outro_start}
+                            onChange={(e) => handleInputChange('skip_outro_start', e.target.value)}
+                            onBlur={() => handleBlurTime('skip_outro_start', false)}
+                            className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' 
+                            placeholder='0' 
+                        />
+                      </div>
+                    </div>
+                    <div className='col-span-1'>
+                      <label className='font-medium '>Bỏ qua Giới thiệu (End)</label>
+                      <div className='mt-2'>
+                        <input 
+                            type="text" 
+                            value={formData.skip_intro_end}
+                            onChange={(e) => handleInputChange('skip_intro_end', e.target.value)}
+                            onBlur={() => handleBlurTime('skip_intro_end', false)}
+                            className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' 
+                            placeholder='0' 
+                        />
+                      </div>
+                    </div>
+                    <div className='col-span-1'>
+                      <label className='font-medium '>Skip kết thúc (End)</label>
+                      <div className='mt-2'>
+                        <input 
+                            type="text" 
+                            value={formData.skip_outro_end}
+                            onChange={(e) => handleInputChange('skip_outro_end', e.target.value)}
+                            onBlur={() => handleBlurTime('skip_outro_end', false)}
+                            className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg' 
+                            placeholder='0' 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                        <label className='font-medium'>Server Tập</label>
+                        {!isAddingNewServer && (
+                            <button 
+                                onClick={enableAddServerMode}
+                                className="text-xs font-medium text-black bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition"
+                            >
+                                + Thêm mới
+                            </button>
+                        )}
+                    </div>
+                    <div className='mt-2'>
+                      {isAddingNewServer ? (
+                          <div className="flex items-center space-x-2">
+                              <input 
+                                  type="text" 
+                                  autoFocus
+                                  value={formData.server}
+                                  onChange={(e) => handleInputChange('server', e.target.value)}
+                                  className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg'
+                                  placeholder='Nhập tên server (VD: Server VIP)...' 
+                              />
+                              <button 
+                                onClick={cancelAddServerMode}
+                                className="px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-500"
+                                title="Hủy"
+                              >
+                                <i className="fa-solid fa-xmark"></i>
+                              </button>
+                          </div>
+                      ) : (
+                          <select
+                            className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg'
+                            value={formData.server}
+                            onChange={(e) => handleInputChange('server', e.target.value)}
+                          >
+                             <option value="">Chọn Server</option>
+                             {currentSelectedEpisode && currentSelectedEpisode.videos.map((vid, idx) => (
+                                 <option key={idx} value={vid.server_name}>
+                                     {vid.server_name}
+                                 </option>
+                             ))}
+                             <option value="Thêm Mới">Thêm Mới</option>
+                          </select>
+                      )}
+                    </div>
+
+                  </div>
+                  <div>
+                    <label className='font-medium'>Loại</label>
+                    <div className='mt-2'>
+                      <select
+                        className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg'
+                        value={formData.type}
+                        onChange={(e) => handleInputChange('type', e.target.value)}
+                      >
+                        <option value="0">Phụ đề</option>
+                        <option value="1">Thuyết minh</option>
+                        <option value="2">Lồng tiếng</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {selectedId && (<div className='flex items-center space-x-3'>
+                    <button
+                      className='text-black w-full mt-3 rounded-lg bg-white px-4 py-2.5 font-medium text-sm border-black border transition'
+                    >
+                      Xóa Server
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className='text-white w-full mt-3 rounded-lg bg-black px-4 py-2.5 font-medium text-sm hover:bg-gray-800 transition'
+                    >
+                      Xóa tập phim
+                    </button>
+                  </div>
+                  )}
+                </div>
+                <div className='col-span-1 flex flex-col'>
+                  <div className='h-full flex flex-col'>
+                    <div className='text-[15px] mt-5 font-semibold'>Độ phân giải</div>
+                    <div className='grid grid-cols-3 mt-3 lg:grid-cols-3 gap-3 w-full'>
+                      <div className='col-span-1'>
+                        <div className='flex items-center space-x-2'>
+                          <input type="checkbox" className='appearance-none w-4 h-4 border border-black rounded bg-white checked:bg-black checked:border-black checked:bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E")] checked:bg-center checked:bg-no-repeat checked:bg-[length:75%] cursor-pointer transition-all' />
+                          <label>240p</label>
+                        </div>
+                      </div>
+                      <div className='col-span-1'>
+                        <div className='flex items-center space-x-2'>
+                          <input type="checkbox" className='appearance-none w-4 h-4 border border-black rounded bg-white checked:bg-black checked:border-black checked:bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E")] checked:bg-center checked:bg-no-repeat checked:bg-[length:75%] cursor-pointer transition-all' />
+                          <label>360p</label>
+                        </div>
+                      </div>
+                      <div className='col-span-1'>
+                        <div className='flex items-center space-x-2'>
+                          <input type="checkbox" className='appearance-none w-4 h-4 border border-black rounded bg-white checked:bg-black checked:border-black checked:bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E")] checked:bg-center checked:bg-no-repeat checked:bg-[length:75%] cursor-pointer transition-all' />
+                          <label>480p</label>
+                        </div>
+                      </div>
+                      <div className='col-span-1'>
+                        <div className='flex items-center space-x-2'>
+                          <input 
+                            type="checkbox" 
+                            checked={formData.quality === 'HD'} 
+                            readOnly 
+                            className='appearance-none w-4 h-4 border border-black rounded bg-white checked:bg-black checked:border-black checked:bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E")] checked:bg-center checked:bg-no-repeat checked:bg-[length:75%] cursor-pointer transition-all' 
+                          />
+                          <label>720p</label>
+                        </div>
+                      </div>
+                      <div className='col-span-1'>
+                        <div className='flex items-center space-x-2'>
+                          <input 
+                            type="checkbox" 
+                            checked={formData.quality === 'FHD' || formData.quality === '1080p'} 
+                            readOnly
+                            className='appearance-none w-4 h-4 border border-black rounded bg-white checked:bg-black checked:border-black checked:bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E")] checked:bg-center checked:bg-no-repeat checked:bg-[length:75%] cursor-pointer transition-all' 
+                          />
+                          <label>1080p</label>
+                        </div>
+                      </div>
+                      <div className='col-span-1'>
+                        <div className='flex items-center space-x-2'>
+                          <input type="checkbox" className='appearance-none w-4 h-4 border border-black rounded bg-white checked:bg-black checked:border-black checked:bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2024%2024%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%3E%3Cpath%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E")] checked:bg-center checked:bg-no-repeat checked:bg-[length:75%] cursor-pointer transition-all' checked={formData.quality === '2K' || formData.quality === '4K'} readOnly />
+                          <label>2160p</label>
+                        </div>
+                      </div>
+                    </div>
+                    <div className='flex items-center mt-5 justify-between'>
+                      <label className='font-medium'>Sắp xếp</label>
+                      <span
+                        onClick={() => handleSelectEpisode(null)}
+                        className={`cursor-pointer font-semibold text-black`}
+                      >
+                        + Thêm tập mới
+                      </span>
+                    </div>
+
+                    <div className='mt-2 h-full'>
+                      <div className='px-1 py-1 mt-2 h-full flex flex-col border-gray-300 border w-full rounded-lg overflow-y-auto bg-white'>
+                        {filteredEpisodes.length === 0 && (
+                            <div className="flex items-center justify-center h-20 text-gray-400 text-sm">
+                                {episodes.length > 0 ? "Phần này chưa có tập nào" : "Chưa có tập nào được thêm"}
+                            </div>
+                        )}
+                        {filteredEpisodes.map((item, index) => (
+                          <div
+                            key={item.id}
+                            draggable
+                            onDragStart={() => handleDragStart(index)}
+                            onDragEnter={() => handleDragEnter(index)}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={(e) => e.preventDefault()}
+                            onClick={() => handleSelectEpisode(item.id)}
+                            className={`p-2 cursor-move rounded-md flex items-center justify-between hover:bg-gray-100 ${selectedId === item.id ? 'bg-black/5 text-black ' : ''}`}
+                          >
+                            <div className="flex flex-col">
+                                <span>{item.name}</span>
+                                <span className='text-[10px] text-gray-400'>{item.part}</span>
+                            </div>
+                          </div>
+                        ))}
+
+                      </div>
+                    </div>
+
+
+                  </div>
+                </div>
+
+              </div>
+
+              <div className='text-[15px] my-5 font-semibold'>Phụ đề</div>
+              <div className='bg-gray-100 rounded-lg p-1 flex items-center space-x-2 mb-4 w-fit'>
+                <button
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${subMethod === 0 ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}
+                    onClick={() => setSubMethod(0)}
+                >
+                    Upload file
+                </button>
+                <button
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${subMethod === 1 ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}
+                    onClick={() => setSubMethod(1)}
+                >
+                    Import URL
+                </button>
+              </div>
+
+              <div className="space-y-3 p-4 border border-gray-200 rounded-lg bg-gray-50/50">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {/* Dòng 1: Chọn Ngôn ngữ + Nhập Label Server */}
+                      <div className="col-span-1">
+                          <select 
+                            className='px-3 py-2 border-gray-300 outline-0 border w-full rounded-lg text-sm'
+                            value={tempSubLang}
+                            onChange={(e) => setTempSubLang(e.target.value)}
+                          >
+                              {LANGUAGES.map(l => (
+                                  <option key={l.code} value={l.code}>[{l.flag}] {l.name}</option>
+                              ))}
+                          </select>
+                      </div>
+                      <div className="col-span-1">
+                          <input
+                              type="text"
+                              className='px-3 py-2 border-gray-300 outline-0 border w-full rounded-lg text-sm'
+                              placeholder='Tên Server (VD: Server VIP...)'
+                              value={tempSubLabel}
+                              onChange={(e) => setTempSubLabel(e.target.value)}
+                          />
+                      </div>
+
+                      {/* Dòng 2: Input File/Link + Button */}
+                      <div className="col-span-1 lg:col-span-2 flex flex-col lg:flex-row gap-3">
+                          <div className="flex-1">
+                              {subMethod === 0 ? (
+                                  <div className='relative'>
+                                      <input 
+                                        type="file" 
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        onChange={handleFileChange}
+                                        accept=".srt,.vtt,.ass"
+                                      />
+                                      <div className='px-3 py-2 border border-dashed border-gray-300 bg-white rounded-lg text-sm text-gray-500 flex items-center justify-between'>
+                                          <span className='truncate'>{tempSubFile ? tempSubFile.name : "Chọn file sub (.srt, .vtt)"}</span>
+                                          <i className="fa-solid fa-upload"></i>
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <input
+                                      type="text"
+                                      className='px-3 py-2 border-gray-300 outline-0 border w-full rounded-lg text-sm'
+                                      placeholder='https://domain.com/sub/caption.vtt'
+                                      value={tempSubUrl}
+                                      onChange={(e) => setTempSubUrl(e.target.value)}
+                                  />
+                              )}
+                          </div>
+                          <button 
+                            onClick={handleAddSubtitle}
+                            className="bg-black text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition"
+                          >
+                              Thêm
+                          </button>
+                      </div>
+                  </div>
+              </div>
+
+              {formData.subtitles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                      {formData.subtitles.map((sub, index) => {
+                          const langInfo = LANGUAGES.find(l => l.code === sub.lang) || { name: sub.lang, flag: '🏳️' };
+                          return (
+                            <div key={index} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-lg">
+                                        {langInfo.flag}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className='flex items-center space-x-2'>
+                                            <span className="text-sm font-bold text-gray-700">{langInfo.name}</span>
+                                            <span className='text-xs bg-black text-white px-1.5 py-0.5 rounded'>{sub.label}</span>
+                                        </div>
+                                        <div className='flex items-center space-x-1 text-xs text-gray-400 mt-0.5'>
+                                            <i className={`fa-solid ${sub.type === 'upload' ? 'fa-file' : 'fa-link'}`}></i>
+                                            <span className="truncate max-w-[200px]">
+                                                {sub.type === 'upload' && sub.fileName ? sub.fileName : (typeof sub.value === 'string' ? sub.value : 'File Object')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => handleRemoveSubtitle(index)}
+                                    className="text-gray-400 hover:text-red-500 transition px-2"
+                                >
+                                    <i className="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                          );
+                      })}
+                  </div>
+              )}
+
+
+
+
+              <button className='text-white w-full mt-8 rounded-lg bg-black px-4 py-3 font-medium text-sm'>
+                Tải lên
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </>
+  );
+};
+export default Upload;

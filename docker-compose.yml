@@ -1,0 +1,122 @@
+# RoPhim platform — 5 app services + internal MongoDB & Redis
+# NOTE: mongo/redis are NOT published to the host (no `ports:`); they are only
+# reachable on the internal `rophim` network. Each app reads its own secrets
+# from its existing .env via `env_file`. Override host names there to point at
+# the compose service names (mongo / redis) when running in this stack.
+
+services:
+  client:
+    build: ./client
+    image: rophim-client
+    env_file: ./client/.env
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - webapi
+      - cdn
+    networks: [rophim]
+    restart: unless-stopped
+
+  admin:
+    build: ./admin
+    image: rophim-admin
+    env_file: ./admin/.env
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    depends_on:
+      - server
+    networks: [rophim]
+    restart: unless-stopped
+
+  webapi:
+    build: ./webapi
+    image: rophim-webapi
+    env_file: ./webapi/.env
+    environment:
+      URL: "0.0.0.0"
+      PORT: "8001"
+      NODE_ENV: production
+    ports:
+      - "8001:8001"
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - webapi_public:/app/public
+      - webapi_tmp:/app/tmp
+    networks: [rophim]
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    image: rophim-server
+    env_file: ./server/.env
+    environment:
+      URL: "0.0.0.0"
+      PORT: "8001"
+      NODE_ENV: production
+    ports:
+      - "8002:8001"
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - server_upload:/app/upload
+      - server_tmp:/app/tmp
+    networks: [rophim]
+    restart: unless-stopped
+
+  cdn:
+    build: ./cdn
+    image: rophim-cdn
+    env_file: ./cdn/.env
+    environment:
+      URL: "0.0.0.0"
+      PORT: "8001"
+      NODE_ENV: production
+    ports:
+      - "5000:8001"
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - cdn_tmp:/app/tmp
+    networks: [rophim]
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    # No published ports — internal network only.
+    env_file: ./.env.infra        # MONGO_INITDB_ROOT_USERNAME / _PASSWORD live here (gitignored)
+    volumes:
+      - mongo_data:/data/db
+    networks: [rophim]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # No published ports — internal network only.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [rophim]
+    restart: unless-stopped
+
+networks:
+  rophim:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  redis_data:
+  webapi_public:
+  webapi_tmp:
+  server_upload:
+  server_tmp:
+  cdn_tmp:

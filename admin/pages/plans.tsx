@@ -1,0 +1,3 @@
+import AdminCard from "@/components/AdminCard";
+const plans=[{name:"Free",price:"0đ",desc:"Xem thường"},{name:"VIP",price:"Tùy cấu hình",desc:"Gói nâng cấp dự kiến"},{name:"Premium",price:"Tùy cấu hình",desc:"Gói cao cấp dự kiến"}];
+export default function PlansPage(){return <AdminCard title="Gói nâng cấp" subtitle="Màn cấu hình plan cơ bản."><div className="grid gap-4 md:grid-cols-3">{plans.map(p=><div key={p.name} className="rounded-2xl border p-5"><h2 className="text-xl font-bold">{p.name}</h2><p className="mt-2 text-2xl font-semibold">{p.price}</p><p className="mt-2 text-slate-500">{p.desc}</p></div>)}</div></AdminCard>}

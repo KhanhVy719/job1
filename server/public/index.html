@@ -1,0 +1,145 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWPlayer HLS Secure Header (Fixed)</title>
+
+    <script src="https://content.jwplatform.com/libraries/KB5zFt7A.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            padding: 20px;
+        }
+
+        #player-container {
+            max-width: 800px;
+            margin: 20px auto;
+            background: #000;
+            min-height: 450px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #status-log {
+            max-width: 800px;
+            margin: 10px auto;
+            font-family: monospace;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2 style="text-align:center;">JWPlayer Secure HLS Test</h2>
+    <div id="player-container"></div>
+    <div id="status-log">Đang tải...</div>
+
+    <script>
+        const CONFIG = {
+            EPISODE_ID: '693b9a412305f4eaaf4a4f5f',
+            VIDEO_INDEX: 0,
+            API_BASE_URL: 'http://127.0.0.1:8000'
+        };
+
+        const log = (msg, isErr = false) => {
+            const el = document.getElementById("status-log");
+            el.innerHTML += `<div style="color:${isErr ? 'red' : 'green'}">${isErr ? '🔴' : '🟢'} ${msg}</div>`;
+            console.log(msg);
+        };
+
+        function generateHMACSync(secret, message) {
+            const hash = CryptoJS.HmacSHA256(message, secret);
+            return hash.toString(CryptoJS.enc.Hex);
+        }
+
+        async function init() {
+            const apiUrl = `${CONFIG.API_BASE_URL}/play/${CONFIG.EPISODE_ID}?ep=${CONFIG.VIDEO_INDEX}`;
+            log("Đang gọi API Play...");
+
+            try {
+                // 1. GỌI API
+                const res = await fetch(apiUrl);
+                if (!res.ok) throw new Error(`API lỗi: ${res.status}`);
+                const data = await res.json();
+
+                if (!data.playlist || data.playlist.length === 0) throw new Error("Playlist trống!");
+
+                // Lấy Token/Secret
+                const apiSecret = data.session?.secret || "";
+                const apiToken = data.session?.token || "";
+
+                if (apiSecret) log("Đã lấy được Secret Key.");
+
+                // 2. XỬ LÝ PLAYLIST
+                const processedPlaylist = data.playlist.map(item => ({
+                    title: item.title,
+                    image: item.image,
+                    sources: item.sources.map(s => {
+                        return {
+                            file: s.file,
+                            label: s.label,
+                            type: "hls",
+                            default: s.default || false,
+
+                            // QUAN TRỌNG: Cấu hình Header tại đây
+                            onXhrOpen: function (xhr, url) {
+                                if (apiSecret) {
+                                    // Tạo timestamp hiện tại
+                                    const timestamp = Date.now().toString();
+
+                                    // Tạo chữ ký NGAY LẬP TỨC (Synchronous)
+                                    const signature = generateHMACSync(apiSecret, timestamp);
+
+                                    // Set Headers
+                                    xhr.setRequestHeader('X-Timestamp', timestamp);
+                                    xhr.setRequestHeader('X-Signature', signature);
+
+                                    // Header Authorization nếu cần
+                                    // xhr.setRequestHeader('Authorization', `Bearer ${apiToken}`);
+                                }
+                            }
+                        };
+                    })
+                }));
+
+                log("Đang khởi tạo JWPlayer...");
+
+                // 3. SETUP PLAYER
+                jwplayer("player-container").setup({
+                    playlist: processedPlaylist,
+                    width: "100%",
+                    aspectratio: "16:9",
+                    autostart: true,
+                });
+
+                // 4. EVENTS DEBUG
+                jwplayer("player-container").on("ready", () => {
+                    const provider = jwplayer("player-container").getProvider().name;
+                    log(`Player Ready! (Provider: ${provider})`);
+                });
+
+                jwplayer("player-container").on("error", e => {
+                    log("Lỗi JWPlayer: " + e.message, true);
+                });
+
+            } catch (err) {
+                log(err.message, true);
+                console.error(err);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

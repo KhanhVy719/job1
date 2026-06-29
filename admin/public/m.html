@@ -1,0 +1,130 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Demo JW Player - Thumbnail Preview</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        #player {
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .note {
+            margin-top: 15px;
+            color: #aaa;
+            font-size: 0.9em;
+            max-width: 800px;
+            line-height: 1.5;
+        }
+
+        code {
+            background: #333;
+            padding: 2px 5px;
+            border-radius: 3px;
+            color: #0f0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>JW Player: Skip Ad + Vietnamese + Preview Thumbnails</h2>
+
+    <div id="player">Đang tải player...</div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://ssl.p.jwpcdn.com/player/v/8.26.2/jwplayer.js"></script>
+
+    <script type="text/javascript">
+        // Key bản quyền (Dùng Free/Dev key nếu key này lỗi)
+        jwplayer.key = "W7zSm81+mmIsg7F+fyHRKhF3ggLkTqtGMhvI92kbqf/ysE99";
+
+        var playerInstance = jwplayer("player");
+
+        playerInstance.setup({
+            // Nguồn video
+            file: "/video.mp4",
+
+            autostart: false,
+            width: "800",
+            height: "450",
+            aspectratio: "16:9",
+            stretching: "uniform",
+
+            tracks: [{
+                file: "thumbs.vtt",
+                kind: "thumbnails"
+            }],
+
+
+            // ----------------------------------------------
+
+            // 1. CẤU HÌNH SETTING & TỐC ĐỘ
+            playbackRateControls: [0.75, 1, 1.25, 1.5, 2],
+            displaytitle: true,
+            displaydescription: true,
+
+            // 2. CẤU HÌNH LOGO
+            logo: {
+                file: "https://via.placeholder.com/120x40?text=TUNGMMO",
+                link: "https://zalo.me/0986379490",
+                position: "top-right",
+                hide: false
+            },
+
+            abouttext: "TUNGMMO Player",
+            aboutlink: "https://zalo.me/0986379490",
+
+            // 3. CẤU HÌNH QUẢNG CÁO
+            advertising: {
+                client: "vast",
+                tag: "https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/single_ad_samples&ciu_szs=300x250&impl=s&gdfp_req=1&env=vp&output=vast&unviewed_position_start=1&cust_params=deployment%3Ddevsite%26sample_ct%3Dlinear&correlator=",
+                skipoffset: 5,
+                skipmessage: "Bỏ qua sau xx giây",
+                skiptext: "Bỏ qua quảng cáo",
+                admessage: "Quảng cáo còn xx giây"
+            },
+
+            // 4. VIỆT HÓA GIAO DIỆN
+            intl: {
+                en: {
+                    playbackRates: "Tốc độ phát",
+                    quality: "Chất lượng",
+                    auto: "Tự động",
+                    settings: "Cài đặt",
+                    related: "Đề xuất",
+                    share: "Chia sẻ",
+                    cc: "Phụ đề"
+                }
+            }
+        });
+    </script>
+
+    <div class="note">
+        <strong>Lưu ý về tính năng Preview:</strong><br>
+        1. Tính năng này yêu cầu file <code>.vtt</code> (WebVTT).<br>
+        2. File VTT này sẽ trỏ đến một tấm ảnh lớn (gọi là <strong>Sprite Sheet</strong>) chứa hàng loạt ảnh nhỏ ghép
+        lại.<br>
+        3. Ở ví dụ trên, tôi dùng file VTT demo nên hình ảnh hiện ra sẽ là phim hoạt hình (Sintel), không khớp với video
+        Mux.<br>
+        4. Để làm thật, bạn cần dùng <strong>FFmpeg</strong> để tạo file sprite và vtt từ video gốc của bạn.
+    </div>
+
+</body>
+
+</html>

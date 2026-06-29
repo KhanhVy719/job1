@@ -1,0 +1,16 @@
+node_modules
+.git
+.env
+.env.*
+npm-debug.log*
+*.log
+Dockerfile
+.dockerignore
+coverage
+.vscode
+.idea
+tmp
+upload
+public/uploads
+*.mp4
+dist

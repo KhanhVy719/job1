@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Netflix Skin - Tailwind CSS JWPlayer</title>
+    <meta name="robots" content="noindex" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/player-icons.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .jwplayer .jw-display-icon-container .jw-icon-display {
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .jw-controlbar.jw-reset {
+            background: #14161e;
+            background: linear-gradient(0deg, rgba(20, 22, 30, .8), rgba(20, 22, 30, 0));
+        }
+
+        #player.jwplayer .jw-display-icon-container .jw-icon-display .jw-svg-icon {
+            fill: #ffffffb0 !important;
+            width: 80px !important;
+            height: 80px !important;
+        }
+
+        #player.jwplayer .jw-display-icon-container .jw-icon-display.jw-button-color:hover .jw-svg-icon {
+            fill: #a2b2ff !important;
+        }
+
+        .jwplayer .jw-display-icon-container .jw-icon-display .jw-svg-icon {
+            fill: #fff !important;
+            width: 30px !important;
+            height: 30px !important;
+        }
+
+        .jwplayer.jw-state-buffering .jw-display-icon-container .jw-icon-display {
+            background-color: transparent !important;
+            border: none !important;
+        }
+
+        .jw-flag-touch .jw-slider-horizontal.jw-chapter-slider-time .jw-slider-container::before {
+            height: auto !important;
+        }
+
+        /* ================================================================== */
+        /* 2. CONTROL BAR & SLIDER UI (Giữ nguyên)                            */
+        /* ================================================================== */
+        .jw-controlbar.jw-reset {
+            padding: 0 12px 16px !important;
+            max-height: -webkit-fill-available !important;
+        }
+
+        @keyframes gradientMove {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .jw-slider-horizontal.jw-chapter-slider-time .jw-slider-container .jw-timesegment-progress {
+            /* background-color: #36fa77 !important; */
+            background: linear-gradient(135deg,
+                    #7ffba2,
+                    #35e37c,
+                    #00d86b,
+                    #c7f5d4,
+                    #ffffff) !important;
+            background-size: 300% 300% !important;
+            animation: gradientMove 12s ease infinite;
+
+        }
+
+        .jw-slider-horizontal.jw-chapter-slider-time .jw-slider-container .jw-timesegment-resetter {
+            height: 10px !important;
+        }
+
+        .jw-state-idle.jw-flag-cardboard-available .jw-controlbar .jw-icon:not(.jw-icon-cardboard):not(.jw-icon-cast):not(.jw-icon-airplay),
+        .jw-state-idle.jw-flag-cardboard-available .jw-controlbar .custom-controls,
+        .jw-state-idle.jw-flag-cast-available:not(.jw-flag-audio-player) .jw-controlbar .jw-icon:not(.jw-icon-cardboard):not(.jw-icon-cast):not(.jw-icon-airplay),
+        .jw-state-idle.jw-flag-cast-available:not(.jw-flag-audio-player) .jw-controlbar .custom-controls,
+        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration::before,
+        .jw-button-container .jw-button-color {
+            display: none !important;
+        }
+
+        /* ================================================================== */
+        /* 3. TIME LABELS (Giữ nguyên)                                        */
+        /* ================================================================== */
+        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-elapsed,
+        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration {
+            position: absolute;
+            top: -46px;
+            font-size: 13px;
+            padding: 0;
+        }
+
+        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-elapsed {
+            left: 5px !important;
+        }
+
+        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration {
+            right: 5px !important;
+        }
+
+        /* ================================================================== */
+        /* 4. THUMBNAIL PREVIEW (Giữ nguyên)                                  */
+        /* ================================================================== */
+        .jwplayer .jw-controlbar .jw-preview {
+            width: auto !important;
+            background-size: cover !important;
+            transform: none !important;
+            background-repeat: no-repeat !important;
+            opacity: 1 !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-sizing: content-box !important;
+        }
+
+        .jw-tooltip-time .jw-preview {
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .jwplayer .jw-tooltip-time {
+            transform: translateX(-50%);
+            margin-left: 0 !important;
+        }
+
+        /* 2. Trạng thái khi thanh control HIỆN (User Active hoặc Paused) */
+        /* Class .jw-flag-user-active được Player tự thêm khi di chuột/chạm màn hình */
+        /* Class .jw-state-paused được Player thêm khi đang Pause */
+
+
+        .jw-knob.jw-reset {
+            height: 17px !important;
+            width: 17px !important;
+            margin-top: -2px !important;
+            background: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2018%2018%22%20width%3D%2218%22%20height%3D%2218%22%20preserveAspectRatio%3D%22xMidYMid%20meet%22%20style%3D%22width%3A%20100%25%3B%20height%3A%20100%25%3B%20transform%3A%20translate3d(0px%2C%200px%2C%200px)%3B%22%3E%3Cdefs%3E%3CclipPath%20id%3D%22__lottie_element_55%22%3E%3Crect%20width%3D%2218%22%20height%3D%2218%22%20x%3D%220%22%20y%3D%220%22%3E%3C%2Frect%3E%3C%2FclipPath%3E%3C%2Fdefs%3E%3Cg%20clip-path%3D%22url(%23__lottie_element_55)%22%3E%3Cg%20transform%3D%22matrix(0.9883429408073425%2C-0.7275781631469727%2C0.6775955557823181%2C0.920446515083313%2C7.3224687576293945%2C-0.7606706619262695)%22%20opacity%3D%221%22%20style%3D%22display%3A%20block%3B%22%3E%3Cg%20opacity%3D%221%22%20transform%3D%22matrix(0.9937776327133179%2C-0.11138220876455307%2C0.11138220876455307%2C0.9937776327133179%2C-2.5239999294281006%2C1.3849999904632568)%22%3E%3Cpath%20fill%3D%22rgb(51%2C51%2C51)%22%20fill-opacity%3D%221%22%20d%3D%22%20M0.75%2C-1.25%20C0.75%2C-1.25%200.75%2C1.25%200.75%2C1.25%20C0.75%2C1.663925051689148%200.4139249920845032%2C2%200%2C2%20C0%2C2%200%2C2%200%2C2%20C-0.4139249920845032%2C2%20-0.75%2C1.663925051689148%20-0.75%2C1.25%20C-0.75%2C1.25%20-0.75%2C-1.25%20-0.75%2C-1.25%20C-0.75%2C-1.663925051689148%20-0.4139249920845032%2C-2%200%2C-2%20C0%2C-2%200%2C-2%200%2C-2%20C0.4139249920845032%2C-2%200.75%2C-1.663925051689148%200.75%2C-1.25z%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20transform%3D%22matrix(1.1436611413955688%2C0.7535901665687561%2C-0.6317168474197388%2C0.9587040543556213%2C16.0070743560791%2C2.902894973754883)%22%20opacity%3D%221%22%20style%3D%22display%3A%20block%3B%22%3E%3Cg%20opacity%3D%221%22%20transform%3D%22matrix(0.992861807346344%2C0.1192704513669014%2C-0.1192704513669014%2C0.992861807346344%2C-2.5239999294281006%2C1.3849999904632568)%22%3E%3Cpath%20fill%3D%22rgb(51%2C51%2C51)%22%20fill-opacity%3D%221%22%20d%3D%22%20M0.75%2C-1.25%20C0.75%2C-1.25%200.75%2C1.25%200.75%2C1.25%20C0.75%2C1.663925051689148%200.4139249920845032%2C2%200%2C2%20C0%2C2%200%2C2%200%2C2%20C-0.4139249920845032%2C2%20-0.75%2C1.663925051689148%20-0.75%2C1.25%20C-0.75%2C1.25%20-0.75%2C-1.25%20-0.75%2C-1.25%20C-0.75%2C-1.663925051689148%20-0.4139249920845032%2C-2%200%2C-2%20C0%2C-2%200%2C-2%200%2C-2%20C0.4139249920845032%2C-2%200.75%2C-1.663925051689148%200.75%2C-1.25z%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20transform%3D%22matrix(1%2C0%2C0%2C1%2C8.890999794006348%2C8.406000137329102)%22%20opacity%3D%221%22%20style%3D%22display%3A%20block%3B%22%3E%3Cg%20opacity%3D%221%22%20transform%3D%22matrix(1%2C0%2C0%2C1%2C0.09099999815225601%2C1.1009999513626099)%22%3E%3Cpath%20fill%3D%22rgb(255%2C255%2C255)%22%20fill-opacity%3D%221%22%20d%3D%22%20M7%2C-3%20C7%2C-3%207%2C3%207%2C3%20C7%2C4.379749774932861%205.879749774932861%2C5.5%204.5%2C5.5%20C4.5%2C5.5%20-4.5%2C5.5%20-4.5%2C5.5%20C-5.879749774932861%2C5.5%20-7%2C4.379749774932861%20-7%2C3%20C-7%2C3%20-7%2C-3%20-7%2C-3%20C-7%2C-4.379749774932861%20-5.879749774932861%2C-5.5%20-4.5%2C-5.5%20C-4.5%2C-5.5%204.5%2C-5.5%204.5%2C-5.5%20C5.879749774932861%2C-5.5%207%2C-4.379749774932861%207%2C-3z%22%3E%3C%2Fpath%3E%3Cpath%20stroke-linecap%3D%22butt%22%20stroke-linejoin%3D%22miter%22%20fill-opacity%3D%220%22%20stroke-miterlimit%3D%224%22%20stroke%3D%22rgb(51%2C51%2C51)%22%20stroke-opacity%3D%221%22%20stroke-width%3D%221.5%22%20d%3D%22%20M7%2C-3%20C7%2C-3%207%2C3%207%2C3%20C7%2C4.379749774932861%205.879749774932861%2C5.5%204.5%2C5.5%20C4.5%2C5.5%20-4.5%2C5.5%20-4.5%2C5.5%20C-5.879749774932861%2C5.5%20-7%2C4.379749774932861%20-7%2C3%20C-7%2C3%20-7%2C-3%20-7%2C-3%20C-7%2C-4.379749774932861%20-5.879749774932861%2C-5.5%20-4.5%2C-5.5%20C-4.5%2C-5.5%204.5%2C-5.5%204.5%2C-5.5%20C5.879749774932861%2C-5.5%207%2C-4.379749774932861%207%2C-3z%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20transform%3D%22matrix(1%2C0%2C0%2C1%2C8.89900016784668%2C8.083999633789062)%22%20opacity%3D%221%22%20style%3D%22display%3A%20block%3B%22%3E%3Cg%20opacity%3D%221%22%20transform%3D%22matrix(1%2C0%2C0%2C1%2C-2.5239999294281006%2C1.3849999904632568)%22%3E%3Cpath%20fill%3D%22rgb(51%2C51%2C51)%22%20fill-opacity%3D%221%22%20d%3D%22%20M0.875%2C-1.125%20C0.875%2C-1.125%200.875%2C1.125%200.875%2C1.125%20C0.875%2C1.607912540435791%200.48291251063346863%2C2%200%2C2%20C0%2C2%200%2C2%200%2C2%20C-0.48291251063346863%2C2%20-0.875%2C1.607912540435791%20-0.875%2C1.125%20C-0.875%2C1.125%20-0.875%2C-1.125%20-0.875%2C-1.125%20C-0.875%2C-1.607912540435791%20-0.48291251063346863%2C-2%200%2C-2%20C0%2C-2%200%2C-2%200%2C-2%20C0.48291251063346863%2C-2%200.875%2C-1.607912540435791%200.875%2C-1.125z%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20transform%3D%22matrix(1%2C0%2C0%2C1%2C14.008999824523926%2C8.083999633789062)%22%20opacity%3D%221%22%20style%3D%22display%3A%20block%3B%22%3E%3Cg%20opacity%3D%221%22%20transform%3D%22matrix(1%2C0%2C0%2C1%2C-2.5239999294281006%2C1.3849999904632568)%22%3E%3Cpath%20fill%3D%22rgb(51%2C51%2C51)%22%20fill-opacity%3D%221%22%20d%3D%22%20M0.8999999761581421%2C-1.100000023841858%20C0.8999999761581421%2C-1.100000023841858%200.8999999761581421%2C1.100000023841858%200.8999999761581421%2C1.100000023841858%20C0.8999999761581421%2C1.596709966659546%200.4967099726200104%2C2%200%2C2%20C0%2C2%200%2C2%200%2C2%20C-0.4967099726200104%2C2%20-0.8999999761581421%2C1.596709966659546%20-0.8999999761581421%2C1.100000023841858%20C-0.8999999761581421%2C1.100000023841858%20-0.8999999761581421%2C-1.100000023841858%20-0.8999999761581421%2C-1.100000023841858%20C-0.8999999761581421%2C-1.596709966659546%20-0.4967099726200104%2C-2%200%2C-2%20C0%2C-2%200%2C-2%200%2C-2%20C0.4967099726200104%2C-2%200.8999999761581421%2C-1.596709966659546%200.8999999761581421%2C-1.100000023841858z%22%3E%3C%2Fpath%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E');
+            border-radius: 0 !important;
+            background-color: transparent !important;
+            box-shadow: none !important;
+            z-index: 1000 !important;
+        }
+
+        .jw-state-playing.jw-floating-dismissible.jw-keep-thumbnail.jw-flag-cast-available.jw-floating-dismissible .jwplayer.jw-flag-media-audio.jw-state-playing #secondary-sub-display,
+        .jwplayer.jw-state-playing:not(.jw-flag-user-inactive):not(.jw-flag-controls-hidden) #secondary-sub-display,
+        .jwplayer:not(.jw-flag-controls-hidden):not(.jw-state-playing) #secondary-sub-display {
+            bottom: 40px !important;
+        }
+
+        .jwplayer.jw-state-idle .jw-preview,
+        .jwplayer.jw-state-complete .jw-preview {
+            width: calc(100% + 5rem);
+            background-size: calc(100% + 6rem);
+            -webkit-transition: opacity 0.35s, -webkit-transform 0.35s;
+            transition: opacity 0.35s, -webkit-transform 0.35s;
+            transition: opacity 0.35s, transform 0.35s;
+            transition: opacity 0.35s, transform 0.35s, -webkit-transform 0.35s;
+            -webkit-transform: translate3d(-4rem, 0, 0);
+            transform: translate3d(-4rem, 0, 0);
+            background-repeat: no-repeat;
+            background-size: cover;
+        }
+
+        .jwplayer.jw-state-idle:hover .jw-preview,
+        .jwplayer.jw-state-complete:hover .jw-preview {
+            -webkit-transform: translate3d(0, 0, 0);
+            transform: translate3d(0, 0, 0);
+        }
+
+
+        /* 3. ĐIỀU CHỈNH RIÊNG CHO PC / TABLET (Màn hình > 768px) */
+        @media (min-width: 768px) {
+
+            .jw-state-playing.jw-floating-dismissible.jw-keep-thumbnail.jw-flag-cast-available.jw-floating-dismissible .jwplayer.jw-flag-media-audio.jw-state-playing #secondary-sub-display,
+            .jwplayer.jw-state-playing:not(.jw-flag-user-inactive):not(.jw-flag-controls-hidden) #secondary-sub-display,
+            .jwplayer:not(.jw-flag-controls-hidden):not(.jw-state-playing) #secondary-sub-display {
+                bottom: 60px !important;
+            }
+
+        }
+
+        /* 4. ĐIỀU CHỈNH CHO MÀN HÌNH RẤT LỚN (Option thêm) */
+        @media (min-width: 1280px) {
+
+            .jw-state-playing.jw-floating-dismissible.jw-keep-thumbnail.jw-flag-cast-available.jw-floating-dismissible .jwplayer.jw-flag-media-audio.jw-state-playing #secondary-sub-display,
+            .jwplayer.jw-state-playing:not(.jw-flag-user-inactive):not(.jw-flag-controls-hidden) #secondary-sub-display,
+            .jwplayer:not(.jw-flag-controls-hidden):not(.jw-state-playing) #secondary-sub-display {
+                bottom: 80px !important;
+            }
+
+        }
+
+
+        /* ================================================================== */
+        /* 6. RESPONSIVE (MOBILE & TABLET) - FIX CAO THẤP                    */
+        /* ================================================================== */
+
+        .jwplayer.jw-stretch-uniform .jw-media video {
+            object-fit: cover !important;
+        }
+
+        @media (max-width: 1268px) {
+            .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-elapsed {
+                left: 30px !important;
+            }
+
+            .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration {
+                right: 30px !important;
+            }
+
+            .jw-controlbar.jw-reset {
+                padding: 0 !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .jw-controlbar {
+                flex-direction: column-reverse !important;
+            }
+
+            .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-elapsed {
+                left: 25px !important;
+            }
+
+            .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration {
+                right: 25px !important;
+            }
+
+            .jw-slider-horizontal.jw-chapter-slider-time .jw-slider-container .jw-timesegment-resetter {
+                height: 7px !important;
+            }
+
+            .custom-controls {
+                position: relative;
+                bottom: -8px;
+            }
+
+            .jw-reset.jw-button-container {
+                display: none !important;
+            }
+
+            .jwplayer.jw-stretch-uniform .jw-media video {
+                object-fit: contain !important;
+            }
+
+        }
+    </style>
+
+    <script src="https://content.jwplatform.com/libraries/KB5zFt7A.js"></script>
+</head>
+
+<body class="!overflow-hidden w-full h-full bg-black">
+    <div id="player" class="!overflow-hidden w-full h-full bg-black">
+    </div>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <script>
+        let currentSkipConfig = null;
+        let currentPlaylistSources = []; // Lưu danh sách các nguồn (Server)
+        let currentSourceIndex = 0;      // Lưu chỉ số nguồn đang phát
+    </script>
+
+<script defer src="/js/player.bundle.js"></script>
+
+</html><script defer src="../public/js/player.bundle.js"></script><script defer src="../public/js/player.bundle.js"></script><script defer src="../public/js/player.bundle.js"></script><script defer src="../public/js/player.bundle.js"></script><script defer src="../public/js/player.bundle.js"></script>

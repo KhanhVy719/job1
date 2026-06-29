@@ -1,0 +1,52 @@
+[
+  {
+    "icon": "fa-solid fa-gamepad",
+    "name": "Giải trí",
+    "path": "giai-tri"
+  },
+  {
+    "icon": "fa-solid fa-briefcase",
+    "name": "Làm việc",
+    "path": "lam-viec"
+  },
+  {
+    "icon": "fa-solid fa-graduation-cap",
+    "name": "Học tập",
+    "path": "hoc-tap"
+  },
+  {
+    "icon": "fa-brands fa-steam",
+    "name": "Game Steam",
+    "path": "game-steam"
+  },
+  {
+    "icon": "fa-solid fa-wand-magic-sparkles",
+    "name": "Edit Ảnh - Video",
+    "path": "edit-anh-video"
+  },
+  {
+    "icon": "fa-brands fa-windows",
+    "name": "Window, Office",
+    "path": "window-office"
+  },
+  {
+    "icon": "fa-brands fa-google-drive",
+    "name": "Google Drive",
+    "path": "google-drive"
+  },
+  {
+    "icon": "fa-solid fa-robot",
+    "name": "Thế giới AI",
+    "path": "the-gioi-ai"
+  },
+  {
+    "icon": "fa-solid fa-shield-halved",
+    "name": "VPN, bảo mật mạng",
+    "path": "vpn-bao-mat-mang"
+  },
+  {
+    "icon": "fa-solid fa-gift",
+    "name": "Gift Card",
+    "path": "gift-card"
+  }
+]

@@ -1,0 +1,64 @@
+# ===== secrets / env =====
+.env
+.env.*
+!.env.example
+!.env.infra.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ===== node / build =====
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+coverage/
+.turbo/
+.cache/
+
+# ===== runtime data / uploads =====
+tmp/
+**/tmp/
+upload/
+**/upload/
+public/uploads/
+**/public/uploads/
+
+# ===== logs / dumps / backups =====
+*.log
+output.log
+logs/
+*.dump
+*.bak
+*.sql
+*.gz
+dump/
+backup/
+backups/
+
+# ===== large media / shell-redirect junk (root) =====
+*.mp4
+video_*.mp4
+"video_202605_160015 copy.mp4"
+b.textContent*
+e.name*
+k.toLowerCase*
+n.includes*
+
+# ===== separate service with its own git =====
+seggay/
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

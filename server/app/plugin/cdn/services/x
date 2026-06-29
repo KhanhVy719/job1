@@ -1,0 +1,203 @@
+import axios from "axios";
+import { Request, Response } from "express";
+import { URL } from "url";
+import crypto from "crypto"; // Dùng để check chữ ký
+import rateLimit from "express-rate-limit"; // Chống bot spam
+import Episode from "../../model/Episode";
+import { localTokenService } from "./services/LocalTokenService";
+
+// --- CẤU HÌNH RATE LIMIT (CHỐNG BOT DOWNLOAD) ---
+// Cho phép tối đa 100 request mỗi 1 phút cho mỗi IP (Tùy chỉnh theo bitrate video)
+const segmentLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 phút
+  max: 100, 
+  message: "Too many requests, please slow down.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Lấy IP thật
+    const xForwardedFor = req.headers["x-forwarded-for"];
+    if (typeof xForwardedFor === "string") return xForwardedFor.split(",")[0].trim();
+    return req.socket.remoteAddress || "0.0.0.0";
+  }
+});
+
+interface StreamRequest extends Request {
+  params: {
+    encryptedToken: string;
+    [key: string]: any;
+  };
+}
+
+class StreamController {
+  constructor() {
+    this.handleStream = this.handleStream.bind(this);
+    this.streamSegment = this.streamSegment.bind(this);
+  }
+
+  // --- Helpers ---
+  private getClientIp(req: Request): string {
+    const xForwardedFor = req.headers["x-forwarded-for"];
+    if (typeof xForwardedFor === "string") {
+      return xForwardedFor.split(",")[0].trim();
+    }
+    let ip = req.socket.remoteAddress || "0.0.0.0";
+    if (ip === "::1") ip = "127.0.0.1";
+    if (ip.startsWith("::ffff:")) ip = ip.replace("::ffff:", "");
+    return ip;
+  }
+
+  private setCorsHeaders(res: Response) {
+    res.setHeader("Access-Control-Allow-Origin", "*"); // Nên đổi thành domain thật của bạn (VD: https://phimmoi.net)
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    // Thêm header X-Signature, X-Timestamp vào danh sách cho phép
+    res.setHeader("Access-Control-Allow-Headers", "X-Playback-Session, X-Signature, X-Timestamp, Content-Type, Authorization, Range");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range");
+  }
+
+  // --- VALIDATE CAO CẤP (CHECK CHỮ KÝ ĐỘNG) ---
+  private validateRequest(req: Request, encryptedToken: string): any | null {
+    const payload = localTokenService.decrypt(encryptedToken);
+    if (!payload) return null;
+
+    // 1. Check IP & UA (Cơ bản)
+    const currentIp = this.getClientIp(req);
+    if (process.env.NODE_ENV === "production" && currentIp !== payload.ip) return null;
+
+    const currentUaHash = localTokenService.hashUserAgent(req.headers["user-agent"] || "");
+    if (currentUaHash !== payload.ua) return null;
+
+    // 2. CHECK DYNAMIC SIGNATURE (BẢO MẬT NHẤT)
+    // Client gửi lên: X-Signature và X-Timestamp
+    const clientSignature = req.headers["x-signature"] as string;
+    const clientTimestamp = req.headers["x-timestamp"] as string;
+
+    if (!clientSignature || !clientTimestamp) {
+        console.log("❌ Validate: Thiếu chữ ký động.");
+        return null;
+    }
+
+    // A. Chống Replay Attack: Kiểm tra thời gian
+    const reqTime = parseInt(clientTimestamp, 10);
+    const now = Date.now();
+    
+    // Chỉ chấp nhận request được tạo ra trong vòng 10 giây gần đây
+    // (Cho phép lệch đồng hồ server/client một chút, ví dụ +/- 10s)
+    if (Math.abs(now - reqTime) > 10000) { 
+        console.log("❌ Validate: Request hết hạn (Replay detected).");
+        return null; 
+    }
+
+    // B. Kiểm tra tính toàn vẹn: Server tự tính lại Hash xem có khớp Client không
+    // Công thức: HMAC_SHA256(Secret + Timestamp)
+    const serverSignature = crypto
+        .createHmac("sha256", payload.secret) // Dùng secret trong token làm key
+        .update(clientTimestamp) // Hash cái timestamp
+        .digest("hex");
+
+    if (clientSignature !== serverSignature) {
+        console.log("❌ Validate: Chữ ký giả mạo.");
+        return null;
+    }
+
+    // 3. Logic Ân Hạn (Pause video)
+    const GRACE_PERIOD = 24 * 60 * 60 * 1000; 
+    if (Date.now() > payload.exp + GRACE_PERIOD) {
+         return null;
+    }
+
+    return payload;
+  }
+
+  // --- Handlers ---
+
+  public async handleStream(req: StreamRequest, res: Response): Promise<any> {
+    // ... Logic giống cũ, chỉ gọi validateRequest là đủ bảo mật ...
+    // (Copy logic handleStream từ bài trước vào đây)
+    // Code ngắn gọn để demo:
+    const { encryptedToken } = req.params;
+    if (req.method === "OPTIONS") { this.setCorsHeaders(res); return res.status(204).end(); }
+    this.setCorsHeaders(res);
+
+    const payload = this.validateRequest(req, encryptedToken);
+    if (!payload) return res.status(403).send("Access Denied");
+
+    try {
+        const episode: any = await Episode.findById(payload.id, { videos: 1 }).lean();
+        if (!episode || !episode.videos[payload.index]) return res.status(404).send("Not found");
+        
+        const video = episode.videos[payload.index];
+        const m3u8Response = await axios.get(video.url, { timeout: 10000 });
+        
+        const host = `${req.protocol}://${req.get("host")}`;
+        const baseUrl = `${host}/stream/${encryptedToken}/seg/`;
+        
+        const rewritten = m3u8Response.data.replace(/^(?!#)(.+)$/gm, (m: string) => `${baseUrl}${m.trim()}`);
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        return res.send(rewritten);
+    } catch (e) { return res.status(502).end(); }
+  }
+
+  // Áp dụng Rate Limit cho hàm này
+  public async streamSegment(req: StreamRequest, res: Response) {
+    // Gọi middleware rate limit thủ công
+    segmentLimiter(req, res, async () => {
+        
+        const { encryptedToken } = req.params;
+        const segmentPath = req.params[0];
+
+        if (req.method === "OPTIONS") { this.setCorsHeaders(res); return res.status(204).end(); }
+        this.setCorsHeaders(res);
+
+        const payload = this.validateRequest(req, encryptedToken);
+        if (!payload || !segmentPath) return res.status(403).end();
+
+        // ... Logic xử lý file (Copy y nguyên logic fix path/query params từ bài trước) ...
+        try {
+            const episode: any = await Episode.findById(payload.id, { videos: 1 }).lean();
+            if (!episode) return res.status(404).end();
+
+            const video = episode.videos[payload.index];
+            const base = new URL(".", video.url).href;
+
+            let originUrl = segmentPath.startsWith("http") ? segmentPath : new URL(segmentPath, base).href;
+            const queryParams = new URLSearchParams(req.query as any).toString();
+            if (queryParams) originUrl += (originUrl.includes('?') ? '&' : '?') + queryParams;
+
+            const isPlaylist = originUrl.includes(".m3u8");
+            const response = await axios({
+                url: originUrl,
+                method: "GET",
+                responseType: isPlaylist ? "text" : "stream",
+                timeout: 20000,
+                headers: { "User-Agent": req.get("User-Agent") || "Mozilla/5.0", "Referer": base },
+                decompress: true
+            });
+
+            if (isPlaylist) {
+                const host = `${req.protocol}://${req.get("host")}`;
+                const lastSlash = segmentPath.lastIndexOf('/');
+                const parent = lastSlash !== -1 ? segmentPath.substring(0, lastSlash + 1) : '';
+                const baseUrl = `${host}/stream/${encryptedToken}/seg/${parent}`;
+                const rewritten = response.data.replace(/^(?!#)(.+)$/gm, (m: string) => {
+                    const l = m.trim(); return (l && !l.startsWith('http')) ? `${baseUrl}${l}` : l;
+                });
+                res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+                return res.send(rewritten);
+            }
+
+            if (response.headers["content-type"]) res.setHeader("Content-Type", response.headers["content-type"]);
+            if (response.headers["content-length"]) res.setHeader("Content-Length", response.headers["content-length"]);
+            res.setHeader("Cache-Control", "public, max-age=86400");
+            response.data.pipe(res);
+            response.data.on("error", () => res.end());
+
+        } catch (err: any) {
+            if (err.response && err.response.status === 404) return res.status(404).end();
+            res.status(502).end();
+        }
+    });
+  }
+}
+
+export default new StreamController();

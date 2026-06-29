@@ -1,0 +1,43 @@
+https://api.themoviedb.org/3/discover/movie?api_key=e9e9d8da18ae29fc430845952232787c&language=vi-VN&page=1 (n lấy all phim)
+https://api.themoviedb.org/3/genre/movie/list?api_key=e9e9d8da18ae29fc430845952232787c&language=vi-VN ( lấy mã thể loại)
+https://api.themoviedb.org/3/genre/tv/list?api_key=e9e9d8da18ae29fc430845952232787c&language=vi-VN ( lấy mã thể loại)
+
+Keyword - Tìm kiếm theo từ khoá
+https://api.themoviedb.org/3/search/keyword?api_key=e9e9d8da18ae29fc430845952232787c&page=1&query=women
+
+Chi tiết của phim
+https://api.themoviedb.org/3/movie/297762?api_key=e9e9d8da18ae29fc430845952232787c&append_to_response=videos
+
+ Review của phim
+https://api.themoviedb.org/3/movie/297762/reviews?api_key=e9e9d8da18ae29fc430845952232787c
+
+ Danh sách phim tương tự của phim
+https://api.themoviedb.org/3/movie/297762/similar?api_key=e9e9d8da18ae29fc430845952232787c&language=en-US&page=1
+
+ Danh sách diễn viên của phim
+http://api.themoviedb.org/3/movie/[id movie]/casts?api_key=e9e9d8da18ae29fc430845952232787c
+
+
+
+
+fetch("https://email10p.vn/livewire/message/frontend.app", {
+  "headers": {
+    "accept": "text/html, application/xhtml+xml",
+    "accept-language": "vi,en-US;q=0.9,en;q=0.8,fr-FR;q=0.7,fr;q=0.6",
+    "content-type": "application/json",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Chromium\";v=\"140\", \"Not=A?Brand\";v=\"24\", \"Google Chrome\";v=\"140\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-csrf-token": "xXzUkDkIi40Z6EQhBTNBzAZhNoGjHcp1ktOSl581",
+    "x-livewire": "true"
+  },
+  "referrer": "https://email10p.vn/mailbox",
+  "body": "{\"fingerprint\":{\"id\":\"z6zJVou5PTLgNNLF9Zz6\",\"name\":\"frontend.app\",\"locale\":\"vi\",\"path\":\"mailbox\",\"method\":\"GET\",\"v\":\"acj\"},\"serverMemo\":{\"children\":[],\"errors\":[],\"htmlHash\":\"7effe6ac\",\"data\":{\"messages\":[],\"deleted\":[],\"error\":\"\",\"email\":\"sfdsdfsafcsa@hinhnen4k.vn\",\"initial\":true,\"overflow\":false},\"dataMeta\":[],\"checksum\":\"6e85e2cd63c3e75a2432e1c809cb976aef15d04f99b7d103dd1c0c43e7ecf9d5\"},\"updates\":[{\"type\":\"fireEvent\",\"payload\":{\"id\":\"m6e1\",\"event\":\"fetchMessages\",\"params\":[]}}]}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+});

@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env
+.env.*
+npm-debug.log*
+*.log
+Dockerfile
+.dockerignore
+coverage
+.vscode
+.idea
+tmp
+upload
+*.mp4

@@ -1,0 +1,5 @@
+tunnels:
+  app:
+    addr: https://127.0.0.1:3000
+    proto: http
+    verify_tls: false
