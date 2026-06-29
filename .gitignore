@@ -31,6 +31,9 @@ upload/
 **/upload/
 public/uploads/
 **/public/uploads/
+# nhưng KHÔNG ignore source code plugin upload (tiktok, ...)
+!**/app/plugin/upload/
+!**/app/plugin/upload/**
 
 # ===== logs / dumps / backups =====
 *.log
