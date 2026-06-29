@@ -1,0 +1,1458 @@
+[
+  {
+    "name": "2D",
+    "path": "2d"
+  },
+  {
+    "name": "3ds Max",
+    "path": "3ds max"
+  },
+  {
+    "name": "acc",
+    "path": "acc"
+  },
+  {
+    "name": "accgame",
+    "path": "accgame"
+  },
+  {
+    "name": "Account",
+    "path": "account"
+  },
+  {
+    "name": "Accounting",
+    "path": "accounting"
+  },
+  {
+    "name": "Acrobat",
+    "path": "acrobat"
+  },
+  {
+    "name": "Acrobat Pro DC",
+    "path": "acrobat pro dc"
+  },
+  {
+    "name": "action",
+    "path": "action"
+  },
+  {
+    "name": "Action Games",
+    "path": "action games"
+  },
+  {
+    "name": "Action-Adventure",
+    "path": "action-adventure"
+  },
+  {
+    "name": "Action2D",
+    "path": "action2d"
+  },
+  {
+    "name": "Adobe",
+    "path": "adobe"
+  },
+  {
+    "name": "adventure",
+    "path": "adventure"
+  },
+  {
+    "name": "After Effects",
+    "path": "after effects"
+  },
+  {
+    "name": "AfterShot",
+    "path": "aftershot"
+  },
+  {
+    "name": "AI",
+    "path": "ai"
+  },
+  {
+    "name": "ai chat bot",
+    "path": "ai chat bot"
+  },
+  {
+    "name": "AI vẽ tranh",
+    "path": "ai vẽ tranh"
+  },
+  {
+    "name": "amz",
+    "path": "amz"
+  },
+  {
+    "name": "Animation & Modeling",
+    "path": "animation & modeling"
+  },
+  {
+    "name": "Animation & Modeling",
+    "path": "animation &amp; modeling"
+  },
+  {
+    "name": "anime",
+    "path": "anime"
+  },
+  {
+    "name": "anthem",
+    "path": "anthem"
+  },
+  {
+    "name": "anti virus",
+    "path": "anti virus"
+  },
+  {
+    "name": "anti-virus",
+    "path": "anti-virus"
+  },
+  {
+    "name": "app",
+    "path": "app"
+  },
+  {
+    "name": "App.new",
+    "path": "app.new"
+  },
+  {
+    "name": "apple",
+    "path": "apple"
+  },
+  {
+    "name": "Arcade",
+    "path": "arcade"
+  },
+  {
+    "name": "Arnold",
+    "path": "arnold"
+  },
+  {
+    "name": "Atmospheric",
+    "path": "atmospheric"
+  },
+  {
+    "name": "Audio Production",
+    "path": "audio production"
+  },
+  {
+    "name": "autocard",
+    "path": "autocard"
+  },
+  {
+    "name": "autodesk",
+    "path": "autodesk"
+  },
+  {
+    "name": "Automobile",
+    "path": "automobile"
+  },
+  {
+    "name": "AutomobileSim",
+    "path": "automobilesim"
+  },
+  {
+    "name": "Basketball",
+    "path": "basketball"
+  },
+  {
+    "name": "battle",
+    "path": "battle"
+  },
+  {
+    "name": "battle.net",
+    "path": "battle.net"
+  },
+  {
+    "name": "battlefield",
+    "path": "battlefield"
+  },
+  {
+    "name": "Beat 'emup",
+    "path": "beat 'emup"
+  },
+  {
+    "name": "bf",
+    "path": "bf"
+  },
+  {
+    "name": "bf4",
+    "path": "bf4"
+  },
+  {
+    "name": "bf5",
+    "path": "bf5"
+  },
+  {
+    "name": "brawlhalla",
+    "path": "brawlhalla"
+  },
+  {
+    "name": "bridge",
+    "path": "bridge"
+  },
+  {
+    "name": "Building",
+    "path": "building"
+  },
+  {
+    "name": "Bắn súng",
+    "path": "bắn súng"
+  },
+  {
+    "name": "Call of Duty",
+    "path": "call of duty"
+  },
+  {
+    "name": "Calm",
+    "path": "calm"
+  },
+  {
+    "name": "card",
+    "path": "card"
+  },
+  {
+    "name": "Casual",
+    "path": "casual"
+  },
+  {
+    "name": "CCleaner",
+    "path": "ccleaner"
+  },
+  {
+    "name": "CD key",
+    "path": "cd key"
+  },
+  {
+    "name": "CDKey",
+    "path": "cdkey"
+  },
+  {
+    "name": "CharacterActionGame",
+    "path": "characteractiongame"
+  },
+  {
+    "name": "chatGPT",
+    "path": "chatgpt"
+  },
+  {
+    "name": "Chiến lược",
+    "path": "chiến lược"
+  },
+  {
+    "name": "Chiến thuật",
+    "path": "chiến thuật"
+  },
+  {
+    "name": "Choices Matter",
+    "path": "choices matter"
+  },
+  {
+    "name": "chplay",
+    "path": "chplay"
+  },
+  {
+    "name": "Chặt chém",
+    "path": "chặt chém"
+  },
+  {
+    "name": "city skyline",
+    "path": "city skyline"
+  },
+  {
+    "name": "CityBuilder",
+    "path": "citybuilder"
+  },
+  {
+    "name": "civil3D",
+    "path": "civil3d"
+  },
+  {
+    "name": "Claude",
+    "path": "claude"
+  },
+  {
+    "name": "cloud",
+    "path": "cloud"
+  },
+  {
+    "name": "Cloud Phone",
+    "path": "cloud phone"
+  },
+  {
+    "name": "Co-op",
+    "path": "co-op"
+  },
+  {
+    "name": "cod4",
+    "path": "cod4"
+  },
+  {
+    "name": "codcw",
+    "path": "codcw"
+  },
+  {
+    "name": "Codecademy",
+    "path": "codecademy"
+  },
+  {
+    "name": "Combat",
+    "path": "combat"
+  },
+  {
+    "name": "CombatRacing",
+    "path": "combatracing"
+  },
+  {
+    "name": "Comedy",
+    "path": "comedy"
+  },
+  {
+    "name": "congviec",
+    "path": "congviec"
+  },
+  {
+    "name": "Construction Cloud",
+    "path": "construction cloud"
+  },
+  {
+    "name": "Cozy",
+    "path": "cozy"
+  },
+  {
+    "name": "Crysis",
+    "path": "crysis"
+  },
+  {
+    "name": "CS:GO",
+    "path": "cs:go"
+  },
+  {
+    "name": "CSGO",
+    "path": "csgo"
+  },
+  {
+    "name": "Cute",
+    "path": "cute"
+  },
+  {
+    "name": "Cyberpunk",
+    "path": "cyberpunk"
+  },
+  {
+    "name": "Công Việc",
+    "path": "công việc"
+  },
+  {
+    "name": "Cốt truyện",
+    "path": "cốt truyện"
+  },
+  {
+    "name": "Dark",
+    "path": "dark"
+  },
+  {
+    "name": "DarkFantasy",
+    "path": "darkfantasy"
+  },
+  {
+    "name": "Design & Illustration",
+    "path": "design & illustration"
+  },
+  {
+    "name": "Design & Illustration",
+    "path": "design &amp; illustration"
+  },
+  {
+    "name": "Destruction",
+    "path": "destruction"
+  },
+  {
+    "name": "Detective",
+    "path": "detective"
+  },
+  {
+    "name": "DEV",
+    "path": "dev"
+  },
+  {
+    "name": "Diablo",
+    "path": "diablo"
+  },
+  {
+    "name": "Difficult",
+    "path": "difficult"
+  },
+  {
+    "name": "Dinosaurs",
+    "path": "dinosaurs"
+  },
+  {
+    "name": "Discord",
+    "path": "discord"
+  },
+  {
+    "name": "disney",
+    "path": "disney"
+  },
+  {
+    "name": "disney plus",
+    "path": "disney plus"
+  },
+  {
+    "name": "disney+",
+    "path": "disney+"
+  },
+  {
+    "name": "disneyplus",
+    "path": "disneyplus"
+  },
+  {
+    "name": "divineesport",
+    "path": "divineesport"
+  },
+  {
+    "name": "Diệt Virus",
+    "path": "diệt virus"
+  },
+  {
+    "name": "Documentary",
+    "path": "documentary"
+  },
+  {
+    "name": "donate",
+    "path": "donate"
+  },
+  {
+    "name": "drive",
+    "path": "drive"
+  },
+  {
+    "name": "Driving",
+    "path": "driving"
+  },
+  {
+    "name": "dropbox",
+    "path": "dropbox"
+  },
+  {
+    "name": "EAPlay",
+    "path": "eaplay"
+  },
+  {
+    "name": "Early Access",
+    "path": "early access"
+  },
+  {
+    "name": "Edit Ảnh",
+    "path": "edit ảnh"
+  },
+  {
+    "name": "Edit Ảnh Video",
+    "path": "edit ảnh video"
+  },
+  {
+    "name": "Education",
+    "path": "education"
+  },
+  {
+    "name": "epic",
+    "path": "epic"
+  },
+  {
+    "name": "excel",
+    "path": "excel"
+  },
+  {
+    "name": "Exploration",
+    "path": "exploration"
+  },
+  {
+    "name": "fake ip",
+    "path": "fake ip"
+  },
+  {
+    "name": "Fantasy",
+    "path": "fantasy"
+  },
+  {
+    "name": "Fighter",
+    "path": "fighter"
+  },
+  {
+    "name": "Fighting",
+    "path": "fighting"
+  },
+  {
+    "name": "First-Person",
+    "path": "first-person"
+  },
+  {
+    "name": "FirstPerson",
+    "path": "firstperson"
+  },
+  {
+    "name": "Flame",
+    "path": "flame"
+  },
+  {
+    "name": "fmv",
+    "path": "fmv"
+  },
+  {
+    "name": "Fortnite",
+    "path": "fortnite"
+  },
+  {
+    "name": "FPS",
+    "path": "fps"
+  },
+  {
+    "name": "Free To Play",
+    "path": "free to play"
+  },
+  {
+    "name": "Funny",
+    "path": "funny"
+  },
+  {
+    "name": "Fusion 360",
+    "path": "fusion 360"
+  },
+  {
+    "name": "Game",
+    "path": "game"
+  },
+  {
+    "name": "Game Development",
+    "path": "game development"
+  },
+  {
+    "name": "game lặn",
+    "path": "game lặn"
+  },
+  {
+    "name": "game phiêu lưu",
+    "path": "game phiêu lưu"
+  },
+  {
+    "name": "game sinh tồn",
+    "path": "game sinh tồn"
+  },
+  {
+    "name": "game Steam",
+    "path": "game steam"
+  },
+  {
+    "name": "games",
+    "path": "games"
+  },
+  {
+    "name": "Gemini",
+    "path": "gemini"
+  },
+  {
+    "name": "Ggplay",
+    "path": "ggplay"
+  },
+  {
+    "name": "giaitri",
+    "path": "giaitri"
+  },
+  {
+    "name": "giả lập",
+    "path": "giả lập"
+  },
+  {
+    "name": "giải trí",
+    "path": "giải trí"
+  },
+  {
+    "name": "giải đố",
+    "path": "giải đố"
+  },
+  {
+    "name": "GOG",
+    "path": "gog"
+  },
+  {
+    "name": "Google",
+    "path": "google"
+  },
+  {
+    "name": "googleone",
+    "path": "googleone"
+  },
+  {
+    "name": "Gore",
+    "path": "gore"
+  },
+  {
+    "name": "gpt",
+    "path": "gpt"
+  },
+  {
+    "name": "GreatSoundtrack",
+    "path": "greatsoundtrack"
+  },
+  {
+    "name": "grok ai",
+    "path": "grok ai"
+  },
+  {
+    "name": "GTA",
+    "path": "gta"
+  },
+  {
+    "name": "GTA 5",
+    "path": "gta 5"
+  },
+  {
+    "name": "GTA V",
+    "path": "gta v"
+  },
+  {
+    "name": "GTA5",
+    "path": "gta5"
+  },
+  {
+    "name": "Góc nhìn thứ nhất (First-person)",
+    "path": "góc nhìn thứ nhất (first-person)"
+  },
+  {
+    "name": "Gói nạp Itunes",
+    "path": "gói nạp itunes"
+  },
+  {
+    "name": "HackandSlash",
+    "path": "hackandslash"
+  },
+  {
+    "name": "hearthstone",
+    "path": "hearthstone"
+  },
+  {
+    "name": "hoctap",
+    "path": "hoctap"
+  },
+  {
+    "name": "horror",
+    "path": "horror"
+  },
+  {
+    "name": "HorrorDark",
+    "path": "horrordark"
+  },
+  {
+    "name": "HorrorSurvival",
+    "path": "horrorsurvival"
+  },
+  {
+    "name": "hung",
+    "path": "hung"
+  },
+  {
+    "name": "Hành động",
+    "path": "hành động"
+  },
+  {
+    "name": "Hẹn hò",
+    "path": "hẹn hò"
+  },
+  {
+    "name": "Học tập",
+    "path": "học tập"
+  },
+  {
+    "name": "icloud",
+    "path": "icloud"
+  },
+  {
+    "name": "IDE",
+    "path": "ide"
+  },
+  {
+    "name": "Illustrator",
+    "path": "illustrator"
+  },
+  {
+    "name": "ImmersiveSim",
+    "path": "immersivesim"
+  },
+  {
+    "name": "ImmersiveTranslate",
+    "path": "immersivetranslate"
+  },
+  {
+    "name": "Indie",
+    "path": "indie"
+  },
+  {
+    "name": "Itune",
+    "path": "itune"
+  },
+  {
+    "name": "itunes",
+    "path": "itunes"
+  },
+  {
+    "name": "JRPG",
+    "path": "jrpg"
+  },
+  {
+    "name": "Karma Koin",
+    "path": "karma koin"
+  },
+  {
+    "name": "Karma Koin 100",
+    "path": "karma koin 100"
+  },
+  {
+    "name": "kaspersky",
+    "path": "kaspersky"
+  },
+  {
+    "name": "khám phá biển",
+    "path": "khám phá biển"
+  },
+  {
+    "name": "KINGDOM",
+    "path": "kingdom"
+  },
+  {
+    "name": "Kinh dị",
+    "path": "kinh dị"
+  },
+  {
+    "name": "Kinh dị sinh tồn",
+    "path": "kinh dị sinh tồn"
+  },
+  {
+    "name": "LEGO",
+    "path": "lego"
+  },
+  {
+    "name": "Lightroom",
+    "path": "lightroom"
+  },
+  {
+    "name": "LocalCo-Op",
+    "path": "localco-op"
+  },
+  {
+    "name": "LootShooter",
+    "path": "lootshooter"
+  },
+  {
+    "name": "luutru",
+    "path": "luutru"
+  },
+  {
+    "name": "Làm Việc",
+    "path": "làm việc"
+  },
+  {
+    "name": "Lén lút",
+    "path": "lén lút"
+  },
+  {
+    "name": "lập trình",
+    "path": "lập trình"
+  },
+  {
+    "name": "Mac",
+    "path": "mac"
+  },
+  {
+    "name": "Magic",
+    "path": "magic"
+  },
+  {
+    "name": "Management",
+    "path": "management"
+  },
+  {
+    "name": "Massively Multiplayer",
+    "path": "massively multiplayer"
+  },
+  {
+    "name": "mathe",
+    "path": "mathe"
+  },
+  {
+    "name": "maya",
+    "path": "maya"
+  },
+  {
+    "name": "Medieval",
+    "path": "medieval"
+  },
+  {
+    "name": "Metroidvania",
+    "path": "metroidvania"
+  },
+  {
+    "name": "microsoft",
+    "path": "microsoft"
+  },
+  {
+    "name": "Minecraft",
+    "path": "minecraft"
+  },
+  {
+    "name": "MobiFone",
+    "path": "mobifone"
+  },
+  {
+    "name": "mod",
+    "path": "mod"
+  },
+  {
+    "name": "ModernWarfare",
+    "path": "modernwarfare"
+  },
+  {
+    "name": "Motion Builder",
+    "path": "motion builder"
+  },
+  {
+    "name": "Movie",
+    "path": "movie"
+  },
+  {
+    "name": "Multiplayer",
+    "path": "multiplayer"
+  },
+  {
+    "name": "Murky Divers",
+    "path": "murky divers"
+  },
+  {
+    "name": "music",
+    "path": "music"
+  },
+  {
+    "name": "Mystery",
+    "path": "mystery"
+  },
+  {
+    "name": "Mô phỏng",
+    "path": "mô phỏng"
+  },
+  {
+    "name": "namecheap vpn",
+    "path": "namecheap vpn"
+  },
+  {
+    "name": "Naviswork",
+    "path": "naviswork"
+  },
+  {
+    "name": "Netfabb Premium",
+    "path": "netfabb premium"
+  },
+  {
+    "name": "netflix",
+    "path": "netflix"
+  },
+  {
+    "name": "NEW",
+    "path": "new"
+  },
+  {
+    "name": "new.tiện ích",
+    "path": "new.tiện ích"
+  },
+  {
+    "name": "News",
+    "path": "news"
+  },
+  {
+    "name": "nghe nhạc",
+    "path": "nghe nhạc"
+  },
+  {
+    "name": "nghenhac",
+    "path": "nghenhac"
+  },
+  {
+    "name": "nhập vai",
+    "path": "nhập vai"
+  },
+  {
+    "name": "Nintendo",
+    "path": "nintendo"
+  },
+  {
+    "name": "Nonlinear",
+    "path": "nonlinear"
+  },
+  {
+    "name": "Nudity",
+    "path": "nudity"
+  },
+  {
+    "name": "Nông trại",
+    "path": "nông trại"
+  },
+  {
+    "name": "office",
+    "path": "office"
+  },
+  {
+    "name": "OKIA",
+    "path": "okia"
+  },
+  {
+    "name": "onedrive",
+    "path": "onedrive"
+  },
+  {
+    "name": "Online-Co-Op-LGBTQ-Superhero-Capitalism",
+    "path": "online-co-op-lgbtq-superhero-capitalism"
+  },
+  {
+    "name": "Open world",
+    "path": "open world"
+  },
+  {
+    "name": "openai",
+    "path": "openai"
+  },
+  {
+    "name": "OpenWorld",
+    "path": "openworld"
+  },
+  {
+    "name": "origin",
+    "path": "origin"
+  },
+  {
+    "name": "overwatch",
+    "path": "overwatch"
+  },
+  {
+    "name": "ow",
+    "path": "ow"
+  },
+  {
+    "name": "pad chuột",
+    "path": "pad chuột"
+  },
+  {
+    "name": "PAD DIVINE",
+    "path": "pad divine"
+  },
+  {
+    "name": "PainterEssentials8",
+    "path": "painteressentials8"
+  },
+  {
+    "name": "PandaDome",
+    "path": "pandadome"
+  },
+  {
+    "name": "Phiêu lưu",
+    "path": "phiêu lưu"
+  },
+  {
+    "name": "Photo Editing",
+    "path": "photo editing"
+  },
+  {
+    "name": "Photoshop",
+    "path": "photoshop"
+  },
+  {
+    "name": "plant",
+    "path": "plant"
+  },
+  {
+    "name": "Platform",
+    "path": "platform"
+  },
+  {
+    "name": "playstation",
+    "path": "playstation"
+  },
+  {
+    "name": "playstation 5",
+    "path": "playstation 5"
+  },
+  {
+    "name": "poe",
+    "path": "poe"
+  },
+  {
+    "name": "Post-apocalyptic",
+    "path": "post-apocalyptic"
+  },
+  {
+    "name": "powerpoint",
+    "path": "powerpoint"
+  },
+  {
+    "name": "Premiere",
+    "path": "premiere"
+  },
+  {
+    "name": "premiere Pro",
+    "path": "premiere pro"
+  },
+  {
+    "name": "prime",
+    "path": "prime"
+  },
+  {
+    "name": "PSN",
+    "path": "psn"
+  },
+  {
+    "name": "Psychological",
+    "path": "psychological"
+  },
+  {
+    "name": "pts",
+    "path": "pts"
+  },
+  {
+    "name": "pubg",
+    "path": "pubg"
+  },
+  {
+    "name": "Puzzle",
+    "path": "puzzle"
+  },
+  {
+    "name": "PvP",
+    "path": "pvp"
+  },
+  {
+    "name": "Quản lý",
+    "path": "quản lý"
+  },
+  {
+    "name": "R6s",
+    "path": "r6s"
+  },
+  {
+    "name": "Racing",
+    "path": "racing"
+  },
+  {
+    "name": "random",
+    "path": "random"
+  },
+  {
+    "name": "Reader",
+    "path": "reader"
+  },
+  {
+    "name": "Resource",
+    "path": "resource"
+  },
+  {
+    "name": "revit",
+    "path": "revit"
+  },
+  {
+    "name": "roblox",
+    "path": "roblox"
+  },
+  {
+    "name": "Roguelike",
+    "path": "roguelike"
+  },
+  {
+    "name": "rpg",
+    "path": "rpg"
+  },
+  {
+    "name": "RTS",
+    "path": "rts"
+  },
+  {
+    "name": "Runner",
+    "path": "runner"
+  },
+  {
+    "name": "Sandbox",
+    "path": "sandbox"
+  },
+  {
+    "name": "Sci-fi",
+    "path": "sci-fi"
+  },
+  {
+    "name": "Sexual Content",
+    "path": "sexual content"
+  },
+  {
+    "name": "Short",
+    "path": "short"
+  },
+  {
+    "name": "sieusale",
+    "path": "sieusale"
+  },
+  {
+    "name": "SimMultiplayer",
+    "path": "simmultiplayer"
+  },
+  {
+    "name": "Simulation",
+    "path": "simulation"
+  },
+  {
+    "name": "Singleplayer",
+    "path": "singleplayer"
+  },
+  {
+    "name": "Sinh tồn",
+    "path": "sinh tồn"
+  },
+  {
+    "name": "Software Training",
+    "path": "software training"
+  },
+  {
+    "name": "Sora",
+    "path": "sora"
+  },
+  {
+    "name": "Souls-like",
+    "path": "souls-like"
+  },
+  {
+    "name": "Soulslike",
+    "path": "soulslike"
+  },
+  {
+    "name": "Space",
+    "path": "space"
+  },
+  {
+    "name": "Sports",
+    "path": "sports"
+  },
+  {
+    "name": "spotify",
+    "path": "spotify"
+  },
+  {
+    "name": "Stealth",
+    "path": "stealth"
+  },
+  {
+    "name": "steam",
+    "path": "steam"
+  },
+  {
+    "name": "steam offline",
+    "path": "steam offline"
+  },
+  {
+    "name": "steamwallet",
+    "path": "steamwallet"
+  },
+  {
+    "name": "Stock",
+    "path": "stock"
+  },
+  {
+    "name": "StoryRich",
+    "path": "storyrich"
+  },
+  {
+    "name": "Strategy",
+    "path": "strategy"
+  },
+  {
+    "name": "study",
+    "path": "study"
+  },
+  {
+    "name": "Superhero",
+    "path": "superhero"
+  },
+  {
+    "name": "Survival",
+    "path": "survival"
+  },
+  {
+    "name": "Survival Horror",
+    "path": "survival horror"
+  },
+  {
+    "name": "SurvivalHorror",
+    "path": "survivalhorror"
+  },
+  {
+    "name": "Survivor",
+    "path": "survivor"
+  },
+  {
+    "name": "Tactical",
+    "path": "tactical"
+  },
+  {
+    "name": "tài khoản",
+    "path": "tài khoản"
+  },
+  {
+    "name": "thanglm",
+    "path": "thanglm"
+  },
+  {
+    "name": "thesims4",
+    "path": "thesims4"
+  },
+  {
+    "name": "Thiet ke",
+    "path": "thiet ke"
+  },
+  {
+    "name": "thiet ket",
+    "path": "thiet ket"
+  },
+  {
+    "name": "thietke",
+    "path": "thietke"
+  },
+  {
+    "name": "ThirdPerson",
+    "path": "thirdperson"
+  },
+  {
+    "name": "thiết kê",
+    "path": "thiết kê"
+  },
+  {
+    "name": "thiết kế",
+    "path": "thiết kế"
+  },
+  {
+    "name": "Thiếu kế",
+    "path": "thiếu kế"
+  },
+  {
+    "name": "Thuê Game",
+    "path": "thuê game"
+  },
+  {
+    "name": "Thư giãn",
+    "path": "thư giãn"
+  },
+  {
+    "name": "thẻ",
+    "path": "thẻ"
+  },
+  {
+    "name": "Thế giới mở",
+    "path": "thế giới mở"
+  },
+  {
+    "name": "Thời trung cổ",
+    "path": "thời trung cổ"
+  },
+  {
+    "name": "Titanfall",
+    "path": "titanfall"
+  },
+  {
+    "name": "Tiện ích",
+    "path": "tiện ích"
+  },
+  {
+    "name": "TkOffline",
+    "path": "tkoffline"
+  },
+  {
+    "name": "Total",
+    "path": "total"
+  },
+  {
+    "name": "truyen",
+    "path": "truyen"
+  },
+  {
+    "name": "trò chơi điện tử",
+    "path": "trò chơi điện tử"
+  },
+  {
+    "name": "Turn-Based",
+    "path": "turn-based"
+  },
+  {
+    "name": "Turn-BasedStrategyRobots",
+    "path": "turn-basedstrategyrobots"
+  },
+  {
+    "name": "Turn-BasedTactics",
+    "path": "turn-basedtactics"
+  },
+  {
+    "name": "tài khoản",
+    "path": "tài khoản"
+  },
+  {
+    "name": "Tâm lý",
+    "path": "tâm lý"
+  },
+  {
+    "name": "ubisoft",
+    "path": "ubisoft"
+  },
+  {
+    "name": "udemy",
+    "path": "udemy"
+  },
+  {
+    "name": "UIUX",
+    "path": "uiux"
+  },
+  {
+    "name": "Utilities",
+    "path": "utilities"
+  },
+  {
+    "name": "VehicularCombat",
+    "path": "vehicularcombat"
+  },
+  {
+    "name": "Veo 3",
+    "path": "veo 3"
+  },
+  {
+    "name": "Video Production",
+    "path": "video production"
+  },
+  {
+    "name": "VideoStudio",
+    "path": "videostudio"
+  },
+  {
+    "name": "viettel",
+    "path": "viettel"
+  },
+  {
+    "name": "vinaphone",
+    "path": "vinaphone"
+  },
+  {
+    "name": "Violent",
+    "path": "violent"
+  },
+  {
+    "name": "VPN",
+    "path": "vpn"
+  },
+  {
+    "name": "VRSports",
+    "path": "vrsports"
+  },
+  {
+    "name": "wallet",
+    "path": "wallet"
+  },
+  {
+    "name": "Warcraft",
+    "path": "warcraft"
+  },
+  {
+    "name": "Web Publishing",
+    "path": "web publishing"
+  },
+  {
+    "name": "Wholesome",
+    "path": "wholesome"
+  },
+  {
+    "name": "win",
+    "path": "win"
+  },
+  {
+    "name": "Windows",
+    "path": "windows"
+  },
+  {
+    "name": "windows 10",
+    "path": "windows 10"
+  },
+  {
+    "name": "windows 11",
+    "path": "windows 11"
+  },
+  {
+    "name": "windows10",
+    "path": "windows10"
+  },
+  {
+    "name": "word",
+    "path": "word"
+  },
+  {
+    "name": "work",
+    "path": "work"
+  },
+  {
+    "name": "World WarII",
+    "path": "world warii"
+  },
+  {
+    "name": "XBox",
+    "path": "xbox"
+  },
+  {
+    "name": "xem phim",
+    "path": "xem phim"
+  },
+  {
+    "name": "Xây dựng",
+    "path": "xây dựng"
+  },
+  {
+    "name": "Xây dựng thành phố",
+    "path": "xây dựng thành phố"
+  },
+  {
+    "name": "youtube",
+    "path": "youtube"
+  },
+  {
+    "name": "zombie",
+    "path": "zombie"
+  },
+  {
+    "name": "Zombies",
+    "path": "zombies"
+  },
+  {
+    "name": "ây đốp",
+    "path": "ây đốp"
+  },
+  {
+    "name": "ây-đốp",
+    "path": "ây-đốp"
+  },
+  {
+    "name": "âyđốp",
+    "path": "âyđốp"
+  },
+  {
+    "name": "Đi cảnh",
+    "path": "đi cảnh"
+  },
+  {
+    "name": "Đối kháng",
+    "path": "đối kháng"
+  },
+  {
+    "name": "đồ họa 3D",
+    "path": "đồ họa 3d"
+  },
+  {
+    "name": " RPG",
+    "path": " rpg"
+  },
+  {
+    "name": "132000",
+    "path": "132000"
+  }
+]

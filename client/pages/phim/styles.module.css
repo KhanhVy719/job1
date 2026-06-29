@@ -1,0 +1,157 @@
+.a{
+   @apply w-full overflow-hidden bg-[#202331]  opacity-[0.7] h-[350px] pb-[300px]  max-[1919px]:pb-[40%] lg:before:absolute  lg:before:inset-0  lg:before:bg-[url('/images/dotted.png')]  lg:before:bg-repeat  lg:before:opacity-20  lg:before:z-10 lg:before:content-[''] lg:after:absolute  lg:after:left-0  lg:after:right-0  lg:after:bottom-0  lg:after:h-[200px] lg:after:[background:linear-gradient(0deg,rgb(13,19,46),rgba(13,19,46,0))] [mask-image:linear-gradient(0deg,transparent_0,black)] [-webkit-mask-image:linear-gradient(0deg,transparent_0,black)]
+}
+
+.b{
+   @apply absolute inset-0 w-full h-full  bg-center bg-cover opacity-20 [filter:blur(80px)]
+}
+
+.c{
+    @apply  absolute  top-0  left-1/2  -translate-x-1/2  w-full  max-w-[1900px]  h-full  [mask-image:linear-gradient(0deg,transparent_0%,black_20%,black_80%,transparent)] [-webkit-mask-image:linear-gradient(0deg,transparent_0%,black_20%,black_80%,transparent)]
+}
+
+.d{
+   @apply absolute  inset-0  opacity-60  bg-cover  bg-center  [-webkit-mask-image:linear-gradient(90deg,transparent_0%,black_30%,black_70%,transparent)] [mask-image:linear-gradient(90deg,transparent_0%,black_30%,black_70%,transparent)]
+}
+
+.e{
+   @apply  pb-28 pt-5 lg:px-6 relative lg:top-[-9rem] w-full  top-[-18rem]
+}
+
+.f{
+   @apply grid grid-cols-1 lg:grid-cols-11 gap-0 lg:gap-8 text-white 
+}
+
+.i{
+     @apply lg:col-span-3 
+}
+
+.m{
+   @apply lg:mb-1 flex flex-col items-center lg:items-start 
+}
+
+.l{
+  @apply  w-[110px] md:w-[135px] lg:w-[155px] flex-shrink-0
+}
+
+.n{
+   @apply pb-[150%] w-full rounded-md overflow-hidden relative h-0 block
+}
+
+.x{
+  @apply object-cover z-[5] absolute top-0 left-0 bottom-0 right-0 h-full w-full
+}
+
+.o{
+   @apply text-2xl mt-5 font-semibold text-white text-center lg:text-start lg:px-0 px-3 max-w-6xl leading-snug
+}
+
+.q{
+   @apply text-[14px] mt-3 text-primary  max-w-6xl leading-snug
+}
+.k{
+  @apply lg:!block w-[-webkit-fill-available]
+}
+
+.is_hidden { 
+  @apply hidden; 
+}
+
+.is_block { 
+  @apply block;
+}
+
+.j{
+   @apply flex flex-wrap justify-center lg:justify-start items-center gap-2 mt-5 text-[11.5px] lg:px-0 px-5
+}
+.s{
+   @apply  text-primary border border-primary px-2 py-0.5 rounded
+}
+
+.y{
+    @apply text-white
+}
+
+.u{
+  @apply border bg-white text-black px-2 py-0.5 rounded font-semibold
+}
+
+.r{
+ @apply  bg-white/10 rounded text-white  px-2 py-0.5
+}
+
+.t{
+  @apply  flex flex-wrap justify-center lg:justify-start items-center gap-2 lg:px-0 px-5
+}
+
+.w{
+   @apply text-xs  mt-3 bg-white/5 hover:text-primary px-2 py-1 rounded transition-colors text-gray-300
+}
+
+.v{
+   @apply hidden lg:flex w-full mt-4 lg:justify-start justify-center items-center
+}
+
+.z{
+   @apply bg-[#ff83001a] text-xs w-auto text-[#ff8300] px-3 py-2.5 rounded-full flex items-center justify-center space-x-2
+}
+
+.g{
+  @apply inline-block w-[13px] h-[13px] border-[3px] border-current border-r-transparent rounded-full animate-spinner-border
+}
+
+.as{
+  @apply px-5 lg:px-0 flex flex-col
+}
+.ad{
+    @apply mt-6
+}
+
+.af{
+   @apply mt-5 space-y-4
+}
+.ag{
+   @apply font-semibold text-sm text-white
+}
+.ah{
+   @apply mt-3 text-gray-400
+}
+.aj{
+   @apply lg:block hidden my-10
+}
+
+.ak{
+   @apply text-lg text-white font-medium
+}
+.al{
+   @apply grid grid-cols-3 gap-4 mt-6
+}
+.aq{
+   @apply flex flex-col items-center justify-start p-2
+}
+
+.aw{
+@apply flex flex-col items-center  w-full
+}
+
+.ae{
+  @apply  relative w-20 h-20 rounded-full overflow-hidden transition-opacity duration-300 hover:opacity-80
+}
+
+.ar{
+   @apply mt-3 w-full text-center
+}
+
+.at{
+  @apply  text-sm font-medium text-white truncate transition-colors duration-200 group-hover:text-primary
+}
+
+.ay{
+   @apply flex lg:hidden items-center my-4 justify-center
+}
+.au{
+   @apply object-cover w-full h-full
+}
+.ai{
+   @apply flex items-center space-x-1  font-medium text-primary
+}

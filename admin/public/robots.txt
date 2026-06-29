@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://shop-divine.vercel.app
+
+# Sitemaps
+Sitemap: https://shop-divine.vercel.app/sitemap.xml

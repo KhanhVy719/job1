@@ -1,0 +1,668 @@
+
+function generateHMACSync(secret, message) {
+    const hash = CryptoJS.HmacSHA256(message, secret);
+    return hash.toString(CryptoJS.enc.Hex);
+}
+
+const CONFIG = {
+    EPISODE_ID: '693b9a412305f4eaaf4a4f5f',
+    VIDEO_INDEX: 0,
+    API_BASE_URL: 'http://127.0.0.1:4000'
+};
+
+
+
+async function init() {
+    const apiUrl = `/play/${CONFIG.EPISODE_ID}?ep=${CONFIG.VIDEO_INDEX}`;
+    log("Đang gọi API Play...");
+
+    try {
+        // 1. GỌI API
+        const res = await fetch(apiUrl);
+        if (!res.ok) throw new Error(`API lỗi: ${res.status}`);
+        const data = await res.json();
+
+        if (!data.playlist || data.playlist.length === 0) throw new Error("Playlist trống!");
+
+        // Lấy Token/Secret
+        const apiSecret = data.session?.secret || "";
+        const apiToken = data.session?.token || "";
+
+        if (apiSecret) log("Đã lấy được Secret Key.");
+
+        // 2. XỬ LÝ PLAYLIST
+        const processedPlaylist = data.playlist.map(item => ({
+            title: item.title,
+            image: item.image,
+            sources: item.sources.map(s => {
+                return {
+                    file: s.file,
+                    label: s.label,
+                    type: "hls",
+                    default: s.default || false,
+
+                    // QUAN TRỌNG: Cấu hình Header tại đây
+                    onXhrOpen: function (xhr, url) {
+                        if (apiSecret) {
+                            // Tạo timestamp hiện tại
+                            const timestamp = Date.now().toString();
+
+                            // Tạo chữ ký NGAY LẬP TỨC (Synchronous)
+                            const signature = generateHMACSync(apiSecret, timestamp);
+
+                            // Set Headers
+                            xhr.setRequestHeader('X-Timestamp', timestamp);
+                            xhr.setRequestHeader('X-Signature', signature);
+
+                            // Header Authorization nếu cần
+                            // xhr.setRequestHeader('Authorization', `Bearer ${apiToken}`);
+                        }
+                    }
+                };
+            })
+        }));
+
+   
+
+        const player = jwplayer("player").setup({
+            controls: true,
+            autostart: false,
+            displaytitle: true,
+            displaydescription: true,
+            abouttext: "Rổ Phim by TUNGMMO",
+            aboutlink: "/",
+            bigPlayButton: true,
+            logo: {
+                file: "/images/logo_rox.svg",
+                link: "/",
+            },
+            stretching: "uniform",
+            captions: {
+                color: "#FFF",
+                fontSize: 14,
+                backgroundOpacity: 0,
+                edgeStyle: "raised",
+            },
+            playlist: processedPlaylist,
+        });
+
+        // --- PLAYER READY ---
+        player.on('ready', function () {
+
+            let subtitleMode = 'on';
+            let secondaryCaptions = [];
+            let secondaryTrackIndex = -1;
+
+            // Vẫn giữ logic tự động chuyển tập khi hết phim (mặc định ON)
+            let isAutoNext = true;
+
+            // --- HÀM HỖ TRỢ ---
+            function timeToSeconds(timeStr) {
+                if (!timeStr) return 0;
+                timeStr = timeStr.replace(',', '.');
+                const parts = timeStr.split(':');
+                if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+                if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+                return 0;
+            }
+
+            function parseVTT(vttText) {
+                const items = [];
+                const lines = vttText.trim().split(/\r\n|\n|\r/);
+                let currentItem = null;
+                const timeRegex = /((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s+-->\s+((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})/;
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.includes('-->')) {
+                        const match = line.match(timeRegex);
+                        if (match) {
+                            if (currentItem) items.push(currentItem);
+                            currentItem = { start: timeToSeconds(match[1]), end: timeToSeconds(match[2]), text: '' };
+                        }
+                    } else if (line.trim() === '' || line.match(/^(WEBVTT|NOTE|\d+$)/)) {
+                        if (currentItem && line.trim() === '') { items.push(currentItem); currentItem = null; }
+                    } else if (currentItem) {
+                        currentItem.text += (currentItem.text ? '<br>' : '') + line.replace(/<[^>]+>/g, '');
+                    }
+                }
+                if (currentItem) items.push(currentItem);
+                return items;
+            }
+
+            function getOriginalFileUrl(labelToFind) {
+                const playlistItem = player.getPlaylistItem();
+                if (!playlistItem || !playlistItem.tracks) return null;
+                const track = playlistItem.tracks.find(t => t.label === labelToFind && (t.kind === 'captions' || t.kind === 'subtitles'));
+                return track ? track.file : null;
+            }
+
+            async function loadSecondaryTrack(url) {
+                secondaryCaptions = [];
+                $('#secondary-sub-display').html('');
+                if (!url) return;
+                try {
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const text = await response.text();
+                        secondaryCaptions = parseVTT(text);
+                    }
+                } catch (e) { console.error(e); }
+            }
+
+            // Sự kiện hết video -> Tự động chuyển
+            player.on('complete', function () {
+                if (isAutoNext) {
+                    window.parent.postMessage({ action: 'next_episode' }, '*');
+                }
+            });
+
+            // --- SETUP CUSTOM CONTROLS ---
+            function setupCustomControls() {
+                const $container = $(player.getContainer());
+                const $controlbar = $container.find('.jw-controlbar.jw-reset');
+
+                if (!$controlbar.length) return;
+
+                let initialQualityName = 'Auto';
+                if (currentPlaylistSources && currentPlaylistSources[currentSourceIndex]) {
+                    initialQualityName = currentPlaylistSources[currentSourceIndex].label;
+                }
+
+                if ($controlbar.find('.custom-controls').length === 0) {
+                    if ($container.find('#secondary-sub-display').length === 0) {
+                        $container.append('<div id="secondary-sub-display" class="jw-secondary-text bottom-[10px] md:bottom-[30px] lg:bottom-[40px] xl:bottom-[50px]" style="display:none; position: absolute;  width: 100%; text-align: center; color: yellow; font-size: clamp(11px, 3vw, 25px); text-shadow: 0 0 4px black; z-index: 1; pointer-events: none;"></div>');
+                    }
+
+                    const customHtml = `
+                    <div class="custom-controls w-full px-2 lg:px-4 lg:pb-2 transition-all duration-300 relative !bottom-[0px] left-0 ">
+                        <div class="flex items-center justify-between gap-2 md:gap-4 lg:gap-8 w-full">
+                            
+                            <div class="inline-flex items-center gap-2 md:gap-4 lg:gap-6 shrink-0">
+                                <div class="flex items-center">
+                                    <button id="toggle_play" class="h-[27px] w-[27px] md:h-[37px] md:w-[37px] lg:h-[48px] lg:w-[48px] text-white hover:text-primary transition-colors"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" classs="w-full h-full " fill="currentColor" preserveAspectRatio="xMidYMid meet" >
+                                    <defs>
+                                    <clipPath id="__lottie_element_223"><rect width="28" height="28" x="0" y="0"></rect></clipPath>
+                                    </defs><g clip-path="url(#__lottie_element_223)"><g style="display: none;" transform="matrix(0.22338493168354034,0,0,0.22338493168354034,20.63869285583496,14.097076416015625)" opacity="0.0023122967705120345">
+                                    <g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path>
+                                    <path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path></g></g><g style="display: none;" transform="matrix(0.6494791507720947,0,0,0.6494791507720947,22.40975570678711,14)" opacity="0.00120935910478579"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path></g></g><g style="display: block;" transform="matrix(1,0,0,1,14,14)" opacity="1"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d="M0 0"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d="M0 0"></path></g><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-7.031000137329102,-10.875 C-7.031000137329102,-10.875 -8.32800006866455,-11.25 -9.42199993133545,-10.468999862670898 C-10.109999656677246,-9.906999588012695 -10,-7.992000102996826 -10,-7.992000102996826 C-10,-7.992000102996826 -10,8.015999794006348 -10,8.015999794006348 C-10,8.015999794006348 -10.125,10.241999626159668 -9,10.991999626159668 C-7.875,11.741999626159668 -5,10.031000137329102 -5,10.031000137329102 C-5,10.031000137329102 7.968999862670898,1.875 7.968999862670898,1.875 C7.968999862670898,1.875 9,1.062000036239624 9,0 C9,-1.062000036239624 7.968999862670898,-1.937999963760376 7.968999862670898,-1.937999963760376 C7.968999862670898,-1.937999963760376 -7.031000137329102,-10.875 -7.031000137329102,-10.875z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-7.031000137329102,-10.875 C-7.031000137329102,-10.875 -8.32800006866455,-11.25 -9.42199993133545,-10.468999862670898 C-10.109999656677246,-9.906999588012695 -10,-7.992000102996826 -10,-7.992000102996826 C-10,-7.992000102996826 -10,8.015999794006348 -10,8.015999794006348 C-10,8.015999794006348 -10.125,10.241999626159668 -9,10.991999626159668 C-7.875,11.741999626159668 -5,10.031000137329102 -5,10.031000137329102 C-5,10.031000137329102 7.968999862670898,1.875 7.968999862670898,1.875 C7.968999862670898,1.875 9,1.062000036239624 9,0 C9,-1.062000036239624 7.968999862670898,-1.937999963760376 7.968999862670898,-1.937999963760376 C7.968999862670898,-1.937999963760376 -7.031000137329102,-10.875 -7.031000137329102,-10.875z"></path></g></g></g></svg>
+                                    </button>
+                                </div>
+                                     <div class="hidden md:flex items-center gap-1 md:gap-2">
+                 <button class="p-1 md:p-[0.4rem] text-white hover:text-primary" id="rewind10">
+                    <div class="w-[15px] h-[15px] md:w-[24px] md:h-[24px]"><svg class="w-full h-full" viewBox="0 0 396 430" fill="currentColor"><path d="M237.342 26.3129C243.281 20.3742 243.281 10.7449 237.342 4.80589C231.403 -1.13321 221.773 -1.13321 215.835 4.80589L178.779 41.8615C178.72 41.9187 178.661 41.9765 178.603 42.0348C175.633 45.0044 174.148 48.8971 174.149 52.7894C174.148 56.6821 175.633 60.5748 178.603 63.5444C178.661 63.6027 178.72 63.6605 178.779 63.7178L215.835 100.773C221.773 106.713 231.403 106.713 237.342 100.773C243.281 94.8342 243.281 85.205 237.342 79.2663L225.235 67.1593C254.972 72.106 283 85.0372 306.208 104.807C336.452 130.57 356.532 166.263 362.848 205.487C369.165 244.711 361.305 284.903 340.677 318.858C320.05 352.813 288.003 378.312 250.282 390.783C212.56 403.255 171.63 401.885 134.828 386.919C98.0256 371.951 67.7562 344.366 49.4459 309.108C31.1355 273.849 25.9816 233.222 34.9071 194.508C43.8326 155.794 66.2547 121.524 98.1538 97.8413C104.898 92.8343 106.306 83.3091 101.299 76.5649C96.2924 69.8212 86.7666 68.4135 80.0229 73.4199C42.3199 101.412 15.8181 141.916 5.26888 187.674C-5.28085 233.432 0.811443 281.452 22.4528 323.125C44.0947 364.8 79.8708 397.403 123.37 415.093C166.868 432.784 215.246 434.403 259.83 419.662C304.414 404.921 342.292 374.783 366.672 334.65C391.052 294.517 400.343 247.012 392.877 200.651C385.412 154.291 361.679 112.104 325.932 81.653C297.666 57.5743 263.349 42.0784 227.007 36.6477L237.342 26.3129Z"></path><path d="M150.883 149.325C150.883 131.568 129.676 122.388 116.729 134.54L90.9877 158.701C84.8635 164.449 84.5588 174.073 90.3069 180.197C96.055 186.321 105.68 186.626 111.803 180.878L120.467 172.746V312.954C120.467 321.354 127.276 328.162 135.675 328.162C144.074 328.162 150.883 321.354 150.883 312.954V149.325Z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M190.579 187.772C190.579 159.154 213.779 135.953 242.398 135.953C271.016 135.953 294.217 159.154 294.217 187.772V276.358C294.217 304.976 271.016 328.176 242.398 328.176C213.779 328.176 190.579 304.976 190.579 276.358V187.772ZM263.801 187.772V276.358C263.801 288.178 254.218 297.761 242.398 297.761C230.577 297.761 220.995 288.178 220.995 276.358V187.772C220.995 175.952 230.577 166.369 242.398 166.369C254.218 166.369 263.801 175.952 263.801 187.772Z"></path></svg></div>
+                </button>
+                 <button class="p-1 md:p-[0.4rem] text-white hover:text-primary" id="forward10">
+                    <div class="w-[15px] h-[15px] md:w-[24px] md:h-[24px]"><svg class="w-full h-full" viewBox="0 0 396 430" fill="currentColor"><path d="M158.267 26.3129C152.327 20.3742 152.327 10.7449 158.267 4.80589C164.206 -1.13321 173.835 -1.13321 179.774 4.80589L216.829 41.8615C216.889 41.9187 216.947 41.9765 217.005 42.0348C219.975 45.0044 221.46 48.8971 221.46 52.7894C221.46 56.6821 219.975 60.5748 217.005 63.5444C216.947 63.6027 216.889 63.6605 216.829 63.7178L179.774 100.773C173.835 106.713 164.206 106.713 158.267 100.773C152.327 94.8342 152.327 85.205 158.267 79.2663L170.374 67.1593C140.637 72.106 112.608 85.0372 89.4001 104.807C59.1561 130.57 39.0766 166.263 32.7602 205.487C26.4439 244.711 34.3038 284.903 54.9314 318.858C75.5589 352.813 107.605 378.312 145.327 390.783C183.048 403.255 223.978 401.885 260.781 386.919C297.583 371.951 327.852 344.366 346.163 309.108C364.473 273.849 369.627 233.222 360.701 194.508C351.776 155.794 329.354 121.524 297.455 97.8413C290.711 92.8343 289.303 83.3091 294.31 76.5649C299.316 69.8212 308.842 68.4135 315.585 73.4199C353.288 101.412 379.79 141.916 390.34 187.674C400.889 233.432 394.797 281.452 373.156 323.125C351.514 364.8 315.738 397.403 272.239 415.093C228.74 432.784 180.363 434.403 135.778 419.662C91.1941 404.921 53.3168 374.783 28.9365 334.65C4.55614 294.517 -4.73438 247.012 2.73119 200.651C10.1968 154.291 33.9297 112.104 69.6765 81.653C97.9424 57.5743 132.259 42.0784 168.601 36.6477L158.267 26.3129Z"></path><path d="M150.883 149.325C150.883 131.568 129.676 122.388 116.729 134.54L90.9877 158.701C84.8635 164.449 84.5588 174.073 90.3069 180.197C96.055 186.321 105.68 186.626 111.803 180.878L120.467 172.746V312.954C120.467 321.354 127.276 328.162 135.675 328.162C144.074 328.162 150.883 321.354 150.883 312.954V149.325Z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M190.579 187.772C190.579 159.154 213.779 135.953 242.398 135.953C271.016 135.953 294.217 159.154 294.217 187.772V276.358C294.217 304.976 271.016 328.176 242.398 328.176C213.779 328.176 190.579 304.976 190.579 276.358V187.772ZM263.801 187.772V276.358C263.801 288.178 254.218 297.761 242.398 297.761C230.577 297.761 220.995 288.178 220.995 276.358V187.772C220.995 175.952 230.577 166.369 242.398 166.369C254.218 166.369 263.801 175.952 263.801 187.772Z"></path></svg></div>
+                </button>
+            </div>
+                            
+                                <div class="md:pl-[1rem]">
+                                    <div class="flex items-center gap-3 text-white hover:text-primary"><i id="volumeIcon" class="cursor-pointer text-[20px] text-center w-6 fa-solid fa-volume-high"></i><div id="volumeBar" class="cursor-pointer h-[10px] relative w-[100px] before:content-[''] before:absolute before:left-0 before:right-0 before:top-[4px] before:bottom-[4px] before:bg-[hsla(0,0%,100%,.3)]"><div class="absolute inset-y-[4px] left-0 bg-white before:absolute before:right-0 before:top-1/2 before:translate-x-1/2 before:-translate-y-1/2 before:w-[12px] before:h-[12px] before:rounded-full before:bg-white before:cursor-pointer before:z-[9] before:content-['']" style="width: 90%" id="volumeFill"></div></div></div>
+                                </div>
+                            </div>
+                            
+                            <div class="inline-flex items-center gap-1 md:gap-4 lg:gap-6 shrink-0">
+                                
+                                <div class="flex items-center">
+                                    <div id="nextBtn" class="text-[14px] p-1 md:p-[0.4rem] flex items-center gap-[0.5rem] text-white hover:text-primary cursor-pointer">
+                                        <div class="w-[20px] h-[20px] md:w-[24px] md:h-[24px]">
+                                            <svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="m4.028 20.882a1 1 0 0 0 1.027-.05l12-8a1 1 0 0 0 0-1.664l-12-8a1 1 0 0 0 -1.555.832v16a1 1 0 0 0 .528.882zm1.472-15.013 9.2 6.131-9.2 6.131z"></path><path d="m19.5 19a1 1 0 0 0 1-1v-12a1 1 0 0 0 -2 0v12a1 1 0 0 0 1 1z"></path></svg>
+                                        </div>
+                                        <span class="hidden lg:block">Tập sau</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center relative">
+                                    <div id="subtitleBtn" class="text-[14px] p-1 md:p-[0.4rem] flex items-center gap-[0.5rem] text-white cursor-pointer hover:text-primary relative">
+                                        <div class="w-[20px] h-[20px] md:w-[24px] md:h-[24px]">
+                                            <svg class="w-full h-full" fill="none" viewBox="0 0 40 41"><path d="M33.75 30.5H6.25C5.25544 30.5 4.30161 30.1049 3.59835 29.4017C2.89509 28.6984 2.5 27.7446 2.5 26.75V9.25C2.5 8.25544 2.89509 7.30161 3.59835 6.59835C4.30161 5.89509 5.25544 5.5 6.25 5.5H33.75C34.7446 5.5 35.6984 5.89509 36.4016 6.59835C37.1049 7.30161 37.5 8.25544 37.5 9.25V26.75C37.5 27.7446 37.1049 28.6984 36.4016 29.4017C35.6984 30.1049 34.7446 30.5 33.75 30.5ZM6.25 8C5.91848 8 5.60054 8.1317 5.36612 8.36612C5.1317 8.60054 5 8.91848 5 9.25V26.75C5 27.0815 5.1317 27.3995 5.36612 27.6339C5.60054 27.8683 5.91848 28 6.25 28H33.75C34.0815 28 34.3995 27.8683 34.6339 27.6339C34.8683 27.3995 35 27.0815 35 26.75V9.25C35 8.91848 34.8683 8.60054 34.6339 8.36612C34.3995 8.1317 34.0815 8 33.75 8H6.25ZM18 23C18 22.6685 17.8683 22.3505 17.6339 22.1161C17.3995 21.8817 17.0815 21.75 16.75 21.75H11.75C11.6515 21.75 11.554 21.7306 11.463 21.6929C11.372 21.6552 11.2893 21.6 11.2197 21.5303C11.15 21.4607 11.0948 21.378 11.0571 21.287C11.0194 21.196 11 21.0985 11 21V15C11 14.8011 11.079 14.6103 11.2197 14.4697C11.3603 14.329 11.5511 14.25 11.75 14.25H16.75C17.0815 14.25 17.3995 14.1183 17.6339 13.8839C17.8683 13.6495 18 13.3315 18 13C18 12.6685 17.8683 12.3505 17.6339 12.1161C17.3995 11.8817 17.0815 11.75 16.75 11.75H11.75C10.8891 11.7533 10.0643 12.0968 9.45554 12.7055C8.84676 13.3143 8.50329 14.1391 8.5 15V21C8.50329 21.8609 8.84676 22.6857 9.45554 23.2945C10.0643 23.9032 10.8891 24.2467 11.75 24.25H16.75C17.0815 24.25 17.3995 24.1183 17.6339 23.8839C17.8683 23.6495 18 23.3315 18 23ZM31.5 23C31.5 22.6685 31.3683 22.3505 31.1339 22.1161C30.8995 21.8817 30.5815 21.75 30.25 21.75H25.25C25.0521 21.7468 24.8632 21.6667 24.7232 21.5268C24.5833 21.3868 24.5032 21.1979 24.5 21V15C24.5032 14.8021 24.5833 14.6132 24.7232 14.4732C24.8632 14.3333 25.0521 14.2532 25.25 14.25H30.25C30.5815 14.25 30.8995 14.1183 31.1339 13.8839C31.3683 13.6495 31.5 13.3315 31.5 13C31.5 12.6685 31.3683 12.3505 31.1339 12.1161C30.8995 11.8817 30.5815 11.75 30.25 11.75H25.25C24.3891 11.7533 23.5643 12.0968 22.9555 12.7055C22.3468 13.3143 22.0033 14.1391 22 15V21C22.0033 21.8609 22.3468 22.6857 22.9555 23.2945C23.5643 23.9032 24.3891 24.2467 25.25 24.25H30.25C30.5815 24.25 30.8995 24.1183 31.1339 23.8839C31.3683 23.6495 31.5 23.3315 31.5 23ZM37.5 34.25C37.5 33.9185 37.3683 33.6005 37.1339 33.3661C36.8995 33.1317 36.5815 33 36.25 33H3.75C3.41848 33 3.10054 33.1317 2.86612 33.3661C2.6317 33.6005 2.5 33.9185 2.5 34.25C2.5 34.5815 2.6317 34.8995 2.86612 35.1339C3.10054 35.3683 3.41848 35.5 3.75 35.5H36.25C36.5815 35.5 36.8995 35.3683 37.1339 35.1339C37.3683 34.8995 37.5 34.5815 37.5 34.25Z" fill="currentColor"></path></svg>
+                                        </div>
+                                        <span class="hidden lg:block">Phụ đề</span>
+                                        <div id="subtitleMenu" class="hidden md:mr-0 mr-[-70px] mt-[20px] z-[50] absolute bottom-[120%] right-0 w-[max-content] backdrop-blur-[10px] bg-[#3c3e4961] border border-white/5 rounded-[0.6rem] shadow-[0_0_20px_rgba(0,0,0,0.2)] text-white text-base overflow-hidden py-2 transition-all"></div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center relative">
+                                    <div id="settingBtn" class="text-[14px] p-1 md:p-[0.4rem] flex items-center gap-[0.5rem] text-white cursor-pointer hover:text-primary relative">
+                                        <div class="relative w-[20px] h-[20px] md:w-[24px] md:h-[24px]">
+                                            <svg class="w-full h-full" fill="none" viewBox="0 0 40 40"><path d="M35.2488 14.8255V25.1732C35.2488 26.8355 34.3618 28.3712 32.9218 29.203L23.9623 34.376C22.5222 35.208 20.7482 35.208 19.3082 34.376L10.3469 29.203C8.90852 28.3712 8.02148 26.8355 8.02148 25.1732V14.8255C8.02148 13.1633 8.90852 11.6276 10.3469 10.7974L19.3082 5.62271C20.7482 4.79243 22.5222 4.79243 23.9623 5.62271L32.9218 10.7974C34.3618 11.6276 35.2488 13.1633 35.2488 14.8255Z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M21.6335 24.6114C24.181 24.6114 26.2453 22.5471 26.2453 19.9994C26.2453 17.4518 24.181 15.3875 21.6335 15.3875C19.0858 15.3875 17.0215 17.4518 17.0215 19.9994C17.0215 22.5471 19.0858 24.6114 21.6335 24.6114Z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                                            <span id="currentQualityLabel" class="whitespace-nowrap bg-white text-black block text-[7px] md:text-[9px] leading-[1] px-[0.2rem] py-[0.15rem] rounded-[0.5rem] absolute -right-[8px] md:-right-[10px] -top-[4px] md:-top-[6px]">${initialQualityName}</span>
+                                        </div>
+                                        <span class="hidden lg:block">Cài đặt</span>
+                                        <div id="settingMenu" class="hidden absolute bottom-[120%] right-0 w-56 backdrop-blur-[10px] bg-[#3c3e4961] border border-white/5 rounded-[0.6rem] shadow-[0_0_20px_rgba(0,0,0,0.2)] text-white text-base overflow-hidden py-2 z-50 transition-all"></div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center">
+                                    <button class="text-[14px] p-1 md:p-[0.4rem] flex items-center gap-[0.5rem] text-white hover:text-primary" id="fullscreenBtn">
+                                        <div class="w-[20px] h-[20px] md:w-[24px] md:h-[24px]"><svg class="w-full h-full" width="128" id="fullscreencion" height="128" viewBox="0 0 128 128" fill="none"><path d="M18.73 55C21.3421 55 23.4601 53.1121 23.4601 50.5L23.4601 27.4601L48 27.4601C50.6121 27.4601 53 25.3421 53 22.7301C53 20.118 50.6121 18 48 18L18.73 18C16.118 18 14 20.118 14 22.73L14 50.5C14 53.1121 16.118 55 18.73 55Z" fill="currentColor"></path><path d="M53.9997 105.27C53.9997 102.658 51.6118 100.54 48.9997 100.54L23.4601 100.54L23.4601 78C23.4601 75.3879 21.3421 73 18.73 73C16.118 73 14 75.3879 14 78L14 105.27C14 107.882 16.118 110 18.73 110L48.9997 110C51.6118 110 53.9997 107.882 53.9997 105.27Z" fill="currentColor"></path><path d="M74 22.73C74 25.3421 76.3879 27.4601 79 27.4601L104.54 27.46L104.54 50C104.54 52.6121 106.658 55 109.27 55C111.882 55 114 52.6121 114 50L114 22.73C114 20.118 111.882 18 109.27 18L79 18C76.3879 18 74 20.118 74 22.73Z" fill="currentColor"></path><path d="M109.27 72C106.658 72 104.54 74.3879 104.54 77V100.54L80 100.54C77.3879 100.54 75 102.658 75 105.27C75 107.882 77.3879 110 80 110L109.27 110C111.882 110 114 107.882 114 105.27V77C114 74.3879 111.882 72 109.27 72Z" fill="currentColor"></path></svg></div>
+                                        <span class="lg:block hidden" id="fullscreenText">Phóng to</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                    $controlbar.append(customHtml);
+                }
+
+                const $settingBtn = $controlbar.find('#settingBtn');
+                const $settingMenu = $settingBtn.find('#settingMenu');
+                const $qualityLabel = $settingBtn.find('#currentQualityLabel');
+
+                // --- SỰ KIỆN NÚT NEXT EPISODE ---
+                $controlbar.find('#nextBtn').off('click').on('click', function () {
+                    window.parent.postMessage({ action: 'next_episode' }, '*');
+                });
+
+                // --- RENDER SUBTITLE MENU ---
+                player.on('time', function (e) {
+                    if (subtitleMode === 'dual' && secondaryCaptions.length > 0) {
+                        const currentTime = e.position;
+                        const caption = secondaryCaptions.find(c => currentTime >= c.start && currentTime <= c.end);
+                        const $cueContainer = $container.find('#secondary-sub-display');
+
+                        if (caption) {
+                            $cueContainer.html(caption.text).show();
+                        } else {
+                            $cueContainer.hide();
+                        }
+                    } else {
+                        $('#secondary-sub-display').hide();
+                    }
+                });
+
+                function renderMainMenu() {
+                    const currentQualityName = currentPlaylistSources[currentSourceIndex]?.label || 'Auto';
+                    $qualityLabel.text(currentQualityName);
+                    const currentSpeed = player.getPlaybackRate ? player.getPlaybackRate() : 1;
+
+                    let html = `
+                        <div class="px-4 py-1.5 font-semibold text-sm">Cài đặt</div>
+                        <div class="menu-item-main px-4 py-2 hover:bg-white/10 cursor-pointer flex justify-between items-center text-[12px]" data-type="quality">
+                            <div class="flex items-center gap-2"><span>Chất lượng</span></div>
+                            <div class="flex items-center gap-1 opacity-70 text-sm"><span>${currentQualityName}</span> <i class="fa-solid fa-chevron-right text-[12px]"></i></div>
+                        </div>
+                        <div class="menu-item-main px-4 py-2 hover:bg-white/10 cursor-pointer flex justify-between items-center text-[12px]" data-type="speed">
+                            <div class="flex items-center gap-2"><span>Tốc độ</span></div>
+                            <div class="flex items-center gap-1 opacity-70 text-sm"><span>${currentSpeed}x</span> <i class="fa-solid fa-chevron-right text-[12px]"></i></div>
+                        </div>`;
+                    $settingMenu.html(html);
+                    $settingMenu.find('.menu-item-main').on('click', function (e) {
+                        e.stopPropagation();
+                        const type = $(this).data('type');
+                        if (type === 'quality') renderQualityMenu();
+                        if (type === 'speed') renderSpeedMenu();
+                    });
+                }
+
+                // --- RENDER QUALITY MENU TỪ SOURCE LIST ---
+                function renderQualityMenu() {
+                    let listHtml = '';
+                    currentPlaylistSources.forEach((source, index) => {
+                        const isActive = index === currentSourceIndex;
+                        listHtml += `<div class="menu-item-quality px-4 py-2 hover:bg-white/10 cursor-pointer flex justify-between items-center text-[12px]" data-index="${index}"><span>${source.label}</span>${isActive ? '<i class="fa-solid fa-check text-green-400 text-[12px]"></i>' : ''}</div>`;
+                    });
+
+                    $settingMenu.html(`<div class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:text-primary back-to-main"><i class="fa-solid fa-chevron-left text-[12px]"></i> <span class="font-semibold text-[12px]">Chất lượng</span></div><div class="max-h-[200px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-900 [&::-webkit-scrollbar-thumb]:rounded-full dark:[&::-webkit-scrollbar-thumb]:bg-neutral-500">${listHtml}</div>`);
+
+                    $settingMenu.find('.back-to-main').on('click', function (e) {
+                        e.stopPropagation();
+                        renderMainMenu();
+                    });
+
+                    $settingMenu.find('.menu-item-quality').on('click', function (e) {
+                        e.stopPropagation();
+                        const index = $(this).data('index');
+                        if (index === currentSourceIndex) return;
+
+                        currentSourceIndex = index;
+                        const selectedSource = currentPlaylistSources[index];
+                        const currentTime = player.getPosition();
+                        const currentItem = player.getPlaylistItem();
+
+                        const newItem = {
+                            file: selectedSource.file,
+                            image: currentItem.image,
+                            title: currentItem.title,
+                            description: currentItem.description,
+                            type: selectedSource.type === 'm3u8' ? 'hls' : 'mp4',
+                            tracks: currentItem.tracks
+                        };
+
+                        player.load([newItem]);
+                        player.play();
+                        player.seek(currentTime);
+                        $qualityLabel.text(selectedSource.label);
+                        renderQualityMenu();
+                    });
+                }
+
+                function renderSpeedMenu(activeSpeed = null) {
+                    const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+                    const currentSpeed = activeSpeed !== null ? activeSpeed : (player.getPlaybackRate ? player.getPlaybackRate() : 1);
+                    let listHtml = '';
+                    speeds.forEach(speed => {
+                        const isActive = speed === currentSpeed;
+                        listHtml += `<div class="menu-item-speed px-4 py-2 hover:bg-white/10 cursor-pointer flex justify-between items-center text-[12px]" data-speed="${speed}"><span>${speed === 1 ? 'Bình thường' : speed + 'x'}</span>${isActive ? '<i class="fa-solid fa-check text-green-400 text-[12px]"></i>' : ''}</div>`;
+                    });
+                    $settingMenu.html(`<div class="flex items-center gap-2 px-3 py-1.5 mb-1 cursor-pointer hover:text-primary back-to-main"><i class="fa-solid fa-chevron-left text-[12px]"></i> <span class="font-semibold text-[12px]">Tốc độ phát</span></div><div class="max-h-[200px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-900 [&::-webkit-scrollbar-thumb]:rounded-full dark:[&::-webkit-scrollbar-thumb]:bg-neutral-500">${listHtml}</div>`);
+                    $settingMenu.find('.back-to-main').on('click', function (e) {
+                        e.stopPropagation();
+                        renderMainMenu();
+                    });
+                    $settingMenu.find('.menu-item-speed').on('click', function (e) {
+                        e.stopPropagation();
+                        const speed = parseFloat($(this).data('speed'));
+                        player.setPlaybackRate(speed);
+                        renderSpeedMenu(speed);
+                    });
+                }
+
+                $settingBtn.off('click').on('click', function (e) {
+                    if ($(e.target).closest('#settingMenu').length) return;
+                    e.stopPropagation();
+                    if ($settingMenu.hasClass('hidden')) {
+                        renderMainMenu();
+                        $settingMenu.removeClass('hidden');
+                        $subtitleMenu.addClass('hidden');
+                    } else {
+                        $settingMenu.addClass('hidden');
+                    }
+                });
+
+                const $subtitleBtn = $controlbar.find('#subtitleBtn');
+                const $subtitleMenu = $subtitleBtn.find('#subtitleMenu');
+                const $secondaryDisplay = $container.find('#secondary-sub-display');
+
+                function renderSubtitleMenu(activeIndex = null) {
+                    const captions = player.getCaptionsList() || [];
+                    const currentIdx = activeIndex !== null ? activeIndex : player.getCurrentCaptions();
+                    let listHtml = '';
+
+                    captions.forEach((track, index) => {
+                        if (index === 0) return;
+                        const isPrimaryActive = (index === currentIdx);
+                        const isSecondaryActive = (index === secondaryTrackIndex && subtitleMode === 'dual');
+
+                        let leftClass = `w-1/2 px-2 py-1.5 md:px-4 md:py-2 cursor-pointer select-primary flex items-center gap-1 md:gap-2 `;
+                        if (isPrimaryActive && subtitleMode !== 'off') {
+                            leftClass += `text-green-400 font-semibold bg-green-400/5`;
+                        } else {
+                            leftClass += `text-white/70 hover:text-white`;
+                        }
+
+                        let leftContent = `<div class="${leftClass}" data-index="${index}">
+                        <span class="truncate flex-1 text-[11px] md:text-[13px]">${track.label || 'Unknown'}</span>
+                        ${(isPrimaryActive && subtitleMode !== 'off') ? '<i class="fa-solid fa-check text-[10px] md:text-xs"></i>' : ''}
+                    </div>`;
+
+                        let rightClass = `w-1/2 p-1.5 md:p-2 flex items-center justify-end border-l border-white/10 `;
+                        if (subtitleMode === 'dual') {
+                            rightClass += `cursor-pointer select-secondary `;
+                            if (isSecondaryActive) {
+                                rightClass += `text-green-400 font-bold bg-white/10 rounded-r`;
+                            } else {
+                                rightClass += `text-white/70 hover:text-white`;
+                            }
+                        } else {
+                            rightClass += `text-white/20 cursor-not-allowed`;
+                        }
+
+                        let rightContent = `<div class="${rightClass}" data-index="${index}" data-label="${track.label}">
+                        <span class="truncate flex-1 text-right text-[11px] md:text-[13px]">${track.label || 'Unknown'}</span>
+                        ${(subtitleMode === 'dual' && isSecondaryActive) ? '<i class="fa-solid fa-check text-[10px] md:text-xs ml-1 md:ml-2"></i>' : ''}
+                    </div>`;
+
+                        listHtml += `<div class="menu-item-caption flex items-stretch border-b border-white/5 last:border-0 transition-colors hover:bg-white/5">${leftContent}${rightContent}</div>`;
+                    });
+
+                    let html = `
+                    <div class="px-2 py-0 md:px-4 md:py-1">
+                        <div class="flex justify-between items-center mb-2 md:mb-3 gap-2">
+                            <span class="font-semibold text-xs md:text-sm">Phụ đề</span>
+                            
+                            <div class="flex gap-1.5 md:gap-2 justify-center">
+                                <button class="caption-toggle-btn px-2 py-0 md:py-0.5 md:px-3 lg:py-1 rounded-full text-[10px] md:text-xs font-medium transition-all ${subtitleMode === 'on' ? 'bg-white text-black' : 'border border-white/30 text-white hover:bg-white/10'}" data-action="on">Bật</button>
+                                <button class="caption-toggle-btn px-2 py-0 md:py-0.5 md:px-3 lg:py-1 rounded-full text-[10px] md:text-xs font-medium transition-all ${subtitleMode === 'dual' ? 'bg-white text-black' : 'border border-white/30 text-white hover:bg-white/10'}" data-action="dual">Song ngữ</button>
+                                <button class="caption-toggle-btn px-2 py-0 md:py-0.5 md:px-3 lg:py-1 rounded-full text-[10px] md:text-xs font-medium transition-all ${subtitleMode === 'off' ? 'bg-white text-black' : 'border border-white/30 text-white hover:bg-white/10'}" data-action="off">Tắt</button>
+                            </div>
+                            
+                            <div class="flex gap-1 md:gap-2">
+                                <div class="flex h-5 w-5 md:h-7 md:w-7 items-center justify-center hover:border-white hover:text-primary border border-white/30 text-white rounded-full cursor-pointer transition-colors"><i class="fa-solid fa-arrow-up-from-bracket text-[10px] md:text-xs"></i></div>
+                                <div class="flex h-5 w-5 md:h-7 md:w-7 hover:border-white hover:text-primary text-white items-center justify-center border border-white/30 rounded-full cursor-pointer transition-colors"><i class="fa-solid fa-gear text-[10px] md:text-xs"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="max-h-[200px] md:max-h-[300px] overflow-y-auto [&::-webkit-scrollbar]:w-1 md:[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-500">
+                        ${listHtml}
+                    </div>`;
+
+                    $subtitleMenu.html(html);
+
+                    $subtitleMenu.find('.select-primary').off('click').on('click', function (e) {
+                        e.stopPropagation();
+                        const index = $(this).data('index');
+                        player.setCurrentCaptions(index);
+                        if (subtitleMode === 'off') subtitleMode = 'on';
+                        renderSubtitleMenu(index);
+                    });
+
+                    $subtitleMenu.find('.select-secondary').off('click').on('click', async function (e) {
+                        if (subtitleMode !== 'dual') return;
+                        e.stopPropagation();
+                        const index = $(this).data('index');
+                        const label = $(this).data('label');
+                        secondaryTrackIndex = index;
+                        const fileUrl = getOriginalFileUrl(label);
+                        await loadSecondaryTrack(fileUrl);
+                        renderSubtitleMenu();
+                    });
+
+                    $subtitleMenu.find('.caption-toggle-btn').on('click', async function (e) {
+                        e.stopPropagation();
+                        const action = $(this).data('action');
+                        subtitleMode = action;
+                        if (action === 'off') {
+                            player.setCurrentCaptions(0);
+                            $secondaryDisplay.hide();
+                        } else if (action === 'on') {
+                            $secondaryDisplay.hide();
+                            if (player.getCurrentCaptions() === 0 && captions.length > 1) player.setCurrentCaptions(1);
+                        } else if (action === 'dual') {
+                            if (player.getCurrentCaptions() === 0 && captions.length > 1) player.setCurrentCaptions(1);
+                            if (secondaryTrackIndex === -1 && captions.length > 1) {
+                                secondaryTrackIndex = (player.getCurrentCaptions() + 1) < captions.length ? player.getCurrentCaptions() + 1 : 1;
+                                const track = captions[secondaryTrackIndex];
+                                if (track) {
+                                    const fileUrl = getOriginalFileUrl(track.label);
+                                    await loadSecondaryTrack(fileUrl);
+                                }
+                            } else if (secondaryTrackIndex !== -1) {
+                                const track = captions[secondaryTrackIndex];
+                                if (track) {
+                                    const fileUrl = getOriginalFileUrl(track.label);
+                                    await loadSecondaryTrack(fileUrl);
+                                }
+                            }
+                            $secondaryDisplay.show();
+                        }
+                        renderSubtitleMenu();
+                    });
+                }
+                $subtitleBtn.off('click').on('click', function (e) {
+                    if ($(e.target).closest('#subtitleMenu').length) return;
+                    e.stopPropagation();
+                    if ($subtitleMenu.hasClass('hidden')) {
+                        renderSubtitleMenu();
+                        $subtitleMenu.removeClass('hidden');
+                        $settingMenu.addClass('hidden');
+                    } else {
+                        $subtitleMenu.addClass('hidden');
+                    }
+                });
+
+                $(document).on('click', function (e) {
+                    if (!$(e.target).closest('#settingBtn').length) $settingMenu.addClass('hidden');
+                    if (!$(e.target).closest('#subtitleBtn').length) $subtitleMenu.addClass('hidden');
+                });
+
+                // LOGIC VOLUME
+                const $playBtn = $controlbar.find('#toggle_play');
+                const $rewind = $controlbar.find('#rewind10');
+                const $forward = $controlbar.find('#forward10');
+                const $bar = $controlbar.find('#volumeBar');
+                const $fill = $controlbar.find('#volumeFill');
+                const $icon = $controlbar.find('#volumeIcon');
+                const $screenBtn = $controlbar.find('#fullscreenBtn');
+                const $screenText = $controlbar.find('#fullscreenText');
+                const $fullscreencion = $controlbar.find('#fullscreencion');
+                const $pipBtn = $controlbar.find('#pipBtn');
+
+                function getPointerPosition(e) {
+                    if (e.type.startsWith('touch')) {
+                        const touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0];
+                        return { x: touch.pageX, y: touch.pageY };
+                    }
+                    return { x: e.pageX, y: e.pageY };
+                }
+
+                function setVolumeIcon(vol) {
+                    const cls = vol === 0 ? 'fa-volume-xmark' : vol < 0.5 ? 'fa-volume-low' : 'fa-volume-high';
+                    $icon.attr('class', `fa-solid ${cls} text-[15px] md:text-[20px] cursor-pointer relative z-10`);
+                }
+
+                function updateVolumeFromEvent(e) {
+                    const width = $bar.outerWidth();
+                    const pos = getPointerPosition(e);
+                    const offset = $bar.offset();
+                    let vol = Math.min(Math.max((pos.x - offset.left) / width, 0), 1);
+                    $fill.css({ 'width': `${vol * 100}%`, 'height': 'auto' });
+                    player.setVolume(vol * 100);
+                    setVolumeIcon(vol);
+                }
+
+                $bar.off('mousedown touchstart').on('mousedown touchstart', function (e) {
+                    if (e.cancelable && e.type === 'touchstart') e.preventDefault();
+                    updateVolumeFromEvent(e);
+                    $(document).on('mousemove.vol touchmove.vol', function (moveEvent) {
+                        if (moveEvent.cancelable && moveEvent.type === 'touchmove') moveEvent.preventDefault();
+                        updateVolumeFromEvent(moveEvent);
+                    });
+                    $(document).on('mouseup.vol touchend.vol', function () {
+                        $(document).off('.vol');
+                    });
+                });
+
+                $icon.off('click').on('click', function (e) {
+                    e.stopPropagation();
+                    const currentVol = player.getVolume();
+                    if (currentVol > 0) {
+                        player.setVolume(0);
+                        setVolumeIcon(0);
+                        $fill.css('width', '0%');
+                    } else {
+                        player.setVolume(100);
+                        setVolumeIcon(1);
+                        $fill.css('width', '100%');
+                    }
+                });
+
+                const initialVol = (player.getVolume ? player.getVolume() : 100) / 100;
+                setVolumeIcon(initialVol);
+                $fill.css({ 'width': `${initialVol * 100}%`, 'height': 'auto' });
+
+                function seekBy(seconds) {
+                    const current = player.getPosition() || 0;
+                    const duration = player.getDuration() || 0;
+                    let newPos = current + seconds;
+                    if (newPos < 0) newPos = 0;
+                    if (duration && newPos > duration) newPos = duration;
+                    player.seek(newPos);
+                }
+                $rewind.off('click').on('click', () => seekBy(-10));
+                $forward.off('click').on('click', () => seekBy(10));
+
+                $screenBtn.off('click').on('click', () => {
+                    // 1. Lấy container chính của player
+                    const playerContainer = document.getElementById('player');
+
+                    // 2. TÌM THẺ VIDEO BÊN TRONG JW PLAYER
+                    // Thường là thẻ video đầu tiên trong container jw-media
+                    const videoElement = playerContainer.querySelector('video');
+
+                    // Kiểm tra xem có đang fullscreen không (sử dụng document.fullscreenElement là đủ)
+                    const isFullscreen = document.fullscreenElement ||
+                        document.webkitFullscreenElement ||
+                        document.mozFullScreenElement ||
+                        document.msFullscreenElement;
+
+                    if (!isFullscreen) {
+                        // --- LOGIC PHÓNG TO ---
+                        // Thử Fullscreen toàn bộ container trước
+                        if (playerContainer.requestFullscreen) {
+                            playerContainer.requestFullscreen();
+                        } else if (playerContainer.webkitRequestFullscreen) {
+                            playerContainer.webkitRequestFullscreen();
+                        } else if (playerContainer.msRequestFullscreen) {
+                            playerContainer.msRequestFullscreen();
+                        } else if (videoElement && videoElement.webkitEnterFullscreen) {
+                            // 💡 KHẮC PHỤC QUAN TRỌNG: Fallback cho iOS (chỉ video mới fullscreen được)
+                            videoElement.webkitEnterFullscreen();
+                        }
+
+                        // Cập nhật icon và text
+                        $fullscreencion.html(`<path d="M79.73 111C82.3421 111 84.4601 108.112 84.4601 105.5L84.4601 84.4601L109 84.4601C111.612 84.4601 114 82.3421 114 79.73C114 77.118 111.612 75 109 75L79.73 75C77.118 75 75 77.118 75 79.73L75 105.5C75 108.112 77.118 111 79.73 111Z" fill="currentColor"></path><path d="M114 48.27C114 45.6579 111.612 43.5399 109 43.5399L83.4601 43.5399L83.4601 23C83.4601 20.3879 81.3421 18 78.73 18C76.118 18 74 20.3879 74 23L74 48.27C74 50.882 76.118 53 78.73 53L109 53C111.612 53 114 50.882 114 48.27Z" fill="currentColor"></path><path d="M14 79.73C14 82.3421 16.3879 84.46 19 84.46L44.5396 84.46L44.5396 105.5C44.5396 108.112 46.6576 110.5 49.2697 110.5C51.8818 110.5 53.9997 108.112 53.9997 105.5L53.9997 79.73C53.9997 77.118 51.8818 75 49.2697 75L19 75C16.3879 75 14 77.118 14 79.73Z" fill="currentColor"></path><path d="M48.27 18C45.6579 18 43.5399 20.3879 43.5399 23V44.5396L19 44.5396C16.3879 44.5396 14 46.6576 14 49.2697C14 51.8818 16.3879 53.9997 19 53.9997L48.27 53.9997C50.882 53.9997 53 51.8818 53 49.2697L53 23C53 20.3879 50.882 18 48.27 18Z" fill="currentColor"></path>`);
+                        $screenText.text('Thu nhỏ');
+                    } else {
+                        // --- LOGIC THU NHỎ ---
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        } else if (document.webkitExitFullscreen) {
+                            document.webkitExitFullscreen();
+                        } else if (document.msExitFullscreen) {
+                            document.msExitFullscreen();
+                        }
+
+                        // Cập nhật icon và text
+                        $fullscreencion.html(`<path d="M18.73 55C21.3421 55 23.4601 53.1121 23.4601 50.5L23.4601 27.4601L48 27.4601C50.6121 27.4601 53 25.3421 53 22.7301C53 20.118 50.6121 18 48 18L18.73 18C16.118 18 14 20.118 14 22.73L14 50.5C14 53.1121 16.118 55 18.73 55Z" fill="currentColor"></path><path d="M53.9997 105.27C53.9997 102.658 51.6118 100.54 48.9997 100.54L23.4601 100.54L23.4601 78C23.4601 75.3879 21.3421 73 18.73 73C16.118 73 14 75.3879 14 78L14 105.27C14 107.882 16.118 110 18.73 110L48.9997 110C51.6118 110 53.9997 107.882 53.9997 105.27Z" fill="currentColor"></path><path d="M74 22.73C74 25.3421 76.3879 27.4601 79 27.4601L104.54 27.46L104.54 50C104.54 52.6121 106.658 55 109.27 55C111.882 55 114 52.6121 114 50L114 22.73C114 20.118 111.882 18 109.27 18L79 18C76.3879 18 74 20.118 74 22.73Z" fill="currentColor"></path><path d="M109.27 72C106.658 72 104.54 74.3879 104.54 77V100.54L80 100.54C77.3879 100.54 75 102.658 75 105.27C75 107.882 77.3879 110 80 110L109.27 110C111.882 110 114 107.882 114 105.27V77C114 74.3879 111.882 72 109.27 72Z" fill="currentColor"></path>`);
+                        $screenText.text('Phóng to');
+                    }
+                });
+
+                function setPlayIcon(isPlaying) {
+                    $playBtn.find('svg').html(
+                        isPlaying ?
+                            `<defs>
+                                    <clipPath id="__lottie_element_223"><rect width="28" height="28" x="0" y="0"></rect></clipPath>
+                                    </defs><g clip-path="url(#__lottie_element_223)"><g style="display: none;" transform="matrix(0.22338493168354034,0,0,0.22338493168354034,20.63869285583496,14.097076416015625)" opacity="0.0023122967705120345">
+                                    <g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path>
+                                    <path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path></g></g><g style="display: none;" transform="matrix(0.6494791507720947,0,0,0.6494791507720947,22.40975570678711,14)" opacity="0.00120935910478579"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path></g></g><g style="display: block;" transform="matrix(1,0,0,1,14,14)" opacity="1"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d="M0 0"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d="M0 0"></path></g><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-7.031000137329102,-10.875 C-7.031000137329102,-10.875 -8.32800006866455,-11.25 -9.42199993133545,-10.468999862670898 C-10.109999656677246,-9.906999588012695 -10,-7.992000102996826 -10,-7.992000102996826 C-10,-7.992000102996826 -10,8.015999794006348 -10,8.015999794006348 C-10,8.015999794006348 -10.125,10.241999626159668 -9,10.991999626159668 C-7.875,11.741999626159668 -5,10.031000137329102 -5,10.031000137329102 C-5,10.031000137329102 7.968999862670898,1.875 7.968999862670898,1.875 C7.968999862670898,1.875 9,1.062000036239624 9,0 C9,-1.062000036239624 7.968999862670898,-1.937999963760376 7.968999862670898,-1.937999963760376 C7.968999862670898,-1.937999963760376 -7.031000137329102,-10.875 -7.031000137329102,-10.875z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-7.031000137329102,-10.875 C-7.031000137329102,-10.875 -8.32800006866455,-11.25 -9.42199993133545,-10.468999862670898 C-10.109999656677246,-9.906999588012695 -10,-7.992000102996826 -10,-7.992000102996826 C-10,-7.992000102996826 -10,8.015999794006348 -10,8.015999794006348 C-10,8.015999794006348 -10.125,10.241999626159668 -9,10.991999626159668 C-7.875,11.741999626159668 -5,10.031000137329102 -5,10.031000137329102 C-5,10.031000137329102 7.968999862670898,1.875 7.968999862670898,1.875 C7.968999862670898,1.875 9,1.062000036239624 9,0 C9,-1.062000036239624 7.968999862670898,-1.937999963760376 7.968999862670898,-1.937999963760376 C7.968999862670898,-1.937999963760376 -7.031000137329102,-10.875 -7.031000137329102,-10.875z"></path></g></g></g></svg>
+                                    </button>
+                                </div>
+                                     <div class="hidden md:flex items-center gap-1 md:gap-2">
+                 <button class="p-1 md:p-[0.4rem] text-white hover:text-primary" id="rewind10">
+                    <div class="w-[15px] h-[15px] md:w-[24px] md:h-[24px]"><svg class="w-full h-full" viewBox="0 0 396 430" fill="currentColor"><path d="M237.342 26.3129C243.281 20.3742 243.281 10.7449 237.342 4.80589C231.403 -1.13321 221.773 -1.13321 215.835 4.80589L178.779 41.8615C178.72 41.9187 178.661 41.9765 178.603 42.0348C175.633 45.0044 174.148 48.8971 174.149 52.7894C174.148 56.6821 175.633 60.5748 178.603 63.5444C178.661 63.6027 178.72 63.6605 178.779 63.7178L215.835 100.773C221.773 106.713 231.403 106.713 237.342 100.773C243.281 94.8342 243.281 85.205 237.342 79.2663L225.235 67.1593C254.972 72.106 283 85.0372 306.208 104.807C336.452 130.57 356.532 166.263 362.848 205.487C369.165 244.711 361.305 284.903 340.677 318.858C320.05 352.813 288.003 378.312 250.282 390.783C212.56 403.255 171.63 401.885 134.828 386.919C98.0256 371.951 67.7562 344.366 49.4459 309.108C31.1355 273.849 25.9816 233.222 34.9071 194.508C43.8326 155.794 66.2547 121.524 98.1538 97.8413C104.898 92.8343 106.306 83.3091 101.299 76.5649C96.2924 69.8212 86.7666 68.4135 80.0229 73.4199C42.3199 101.412 15.8181 141.916 5.26888 187.674C-5.28085 233.432 0.811443 281.452 22.4528 323.125C44.0947 364.8 79.8708 397.403 123.37 415.093C166.868 432.784 215.246 434.403 259.83 419.662C304.414 404.921 342.292 374.783 366.672 334.65C391.052 294.517 400.343 247.012 392.877 200.651C385.412 154.291 361.679 112.104 325.932 81.653C297.666 57.5743 263.349 42.0784 227.007 36.6477L237.342 26.3129Z"></path><path d="M150.883 149.325C150.883 131.568 129.676 122.388 116.729 134.54L90.9877 158.701C84.8635 164.449 84.5588 174.073 90.3069 180.197C96.055 186.321 105.68 186.626 111.803 180.878L120.467 172.746V312.954C120.467 321.354 127.276 328.162 135.675 328.162C144.074 328.162 150.883 321.354 150.883 312.954V149.325Z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M190.579 187.772C190.579 159.154 213.779 135.953 242.398 135.953C271.016 135.953 294.217 159.154 294.217 187.772V276.358C294.217 304.976 271.016 328.176 242.398 328.176C213.779 328.176 190.579 304.976 190.579 276.358V187.772ZM263.801 187.772V276.358C263.801 288.178 254.218 297.761 242.398 297.761C230.577 297.761 220.995 288.178 220.995 276.358V187.772C220.995 175.952 230.577 166.369 242.398 166.369C254.218 166.369 263.801 175.952 263.801 187.772Z"></path></svg></div>
+                </button>
+                 <button class="p-1 md:p-[0.4rem] text-white hover:text-primary" id="forward10">
+                    <div class="w-[15px] h-[15px] md:w-[24px] md:h-[24px]"><svg class="w-full h-full" viewBox="0 0 396 430" fill="currentColor"><path d="M158.267 26.3129C152.327 20.3742 152.327 10.7449 158.267 4.80589C164.206 -1.13321 173.835 -1.13321 179.774 4.80589L216.829 41.8615C216.889 41.9187 216.947 41.9765 217.005 42.0348C219.975 45.0044 221.46 48.8971 221.46 52.7894C221.46 56.6821 219.975 60.5748 217.005 63.5444C216.947 63.6027 216.889 63.6605 216.829 63.7178L179.774 100.773C173.835 106.713 164.206 106.713 158.267 100.773C152.327 94.8342 152.327 85.205 158.267 79.2663L170.374 67.1593C140.637 72.106 112.608 85.0372 89.4001 104.807C59.1561 130.57 39.0766 166.263 32.7602 205.487C26.4439 244.711 34.3038 284.903 54.9314 318.858C75.5589 352.813 107.605 378.312 145.327 390.783C183.048 403.255 223.978 401.885 260.781 386.919C297.583 371.951 327.852 344.366 346.163 309.108C364.473 273.849 369.627 233.222 360.701 194.508C351.776 155.794 329.354 121.524 297.455 97.8413C290.711 92.8343 289.303 83.3091 294.31 76.5649C299.316 69.8212 308.842 68.4135 315.585 73.4199C353.288 101.412 379.79 141.916 390.34 187.674C400.889 233.432 394.797 281.452 373.156 323.125C351.514 364.8 315.738 397.403 272.239 415.093C228.74 432.784 180.363 434.403 135.778 419.662C91.1941 404.921 53.3168 374.783 28.9365 334.65C4.55614 294.517 -4.73438 247.012 2.73119 200.651C10.1968 154.291 33.9297 112.104 69.6765 81.653C97.9424 57.5743 132.259 42.0784 168.601 36.6477L158.267 26.3129Z"></path><path d="M150.883 149.325C150.883 131.568 129.676 122.388 116.729 134.54L90.9877 158.701C84.8635 164.449 84.5588 174.073 90.3069 180.197C96.055 186.321 105.68 186.626 111.803 180.878L120.467 172.746V312.954C120.467 321.354 127.276 328.162 135.675 328.162C144.074 328.162 150.883 321.354 150.883 312.954V149.325Z"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M190.579 187.772C190.579 159.154 213.779 135.953 242.398 135.953C271.016 135.953 294.217 159.154 294.217 187.772V276.358C294.217 304.976 271.016 328.176 242.398 328.176C213.779 328.176 190.579 304.976 190.579 276.358V187.772ZM263.801 187.772V276.358C263.801 288.178 254.218 297.761 242.398 297.761C230.577 297.761 220.995 288.178 220.995 276.358V187.772C220.995 175.952 230.577 166.369 242.398 166.369C254.218 166.369 263.801 175.952 263.801 187.772Z"></path>` :
+                            '<path d="m10.8 15.9 4.67-3.5c.27-.2.27-.6 0-.8l-4.67-3.5c-.33-.25-.8-.01-.8.4v7c0 .41.47.65.8.4zm1.2-13.9c-5.52 0-10 4.48-10 10s4.48 10 10 10 10-4.48 10-10-4.48-10-10-10zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="curfrentColor"></path>'
+                    );
+                }
+                $playBtn.off('click').on('click', function () {
+                    const state = player.getState?.();
+                    if (state === 'playing') player.pause(true);
+                    else player.play(true);
+                });
+                ['play', 'playing'].forEach(e => player.on(e, () => setPlayIcon(true)));
+                ['pause', 'complete'].forEach(e => player.on(e, () => setPlayIcon(false)));
+                setPlayIcon(player.getState?.() === 'playing');
+            }
+
+            setupCustomControls();
+        });
+
+    } catch (err) {
+        log(err.message, true);
+        console.error(err);
+    }
+}

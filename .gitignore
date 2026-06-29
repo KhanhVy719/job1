@@ -30,3 +30,39 @@ backups/
 Thumbs.db
 .vscode/
 .idea/
+
+# Runtime data / generated caches
+**/.next/
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+**/.cache/
+**/tmp/
+**/temp/
+**/logs/
+**/backup/
+**/backups/
+**/target/
+**/upload/
+!**/app/plugin/upload/
+!**/app/plugin/upload/**
+**/secure_keys/
+
+# Large runtime media
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+
+# Local service output / scratch files
+output.log
+service-*.log
+ngrok.yml
+s.txt
+x.sql
+
+# TypeScript incremental build metadata
+*.tsbuildinfo
+

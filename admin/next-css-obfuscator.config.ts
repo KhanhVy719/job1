@@ -1,0 +1,27 @@
+// next-css-obfuscator.config.ts
+const config = {
+  enable: true,
+  mode: 'random',
+  refreshClassConversionJson: false,
+  allowExtensions: ['.jsx', '.tsx', '.js', '.ts', '.html', '.rsc'],
+  blackListedFolderPaths: [
+    './.next/cache',
+    /\.next\/server\/pages\/api/,
+    /_document.*/,
+    /_app.*/,
+    /components\/.*/,
+    /sections\/.*/,
+    /api\/.*/,
+    /node_modules/,
+    /\.svg$/,
+    /\.icon\./,
+    /icons?\//i,
+  ],
+  allowList: [
+    /^fa-/, /^fas /, /^far /, /^fab /, /^fa /, // Font Awesome
+    /^icon-/, // Icon classes
+    /^svg-/ // SVG related classes
+  ]
+};
+
+export default config;

@@ -1,0 +1,87 @@
+/* styles.module.css */
+
+/* Lớp chung cho div nền tuyệt đối (absolute background div) */
+.Header{
+  @apply absolute top-0 left-0 right-0 w-full h-[50vh] opacity-50 bg-cover bg-center bg-no-repeat;
+}
+
+/* Lớp mask-image cho hiệu ứng gradient (linear-gradient mask) */
+.background {
+  @apply [mask-image:linear-gradient(0deg,transparent_0,black)] [-webkit-mask-image:linear-gradient(0deg,transparent_0,black)];
+}
+
+/* Lớp padding và position cho container chính */
+.main {
+  @apply pb-28 pt-5 px-5 lg:px-6 relative;
+}
+
+/* Lớp tiêu đề động */
+.title {
+  @apply text-2xl font-semibold text-white;
+}
+
+/* Lớp margin cho container MovieList hoặc loading/pagination */
+.loader{
+  @apply my-6;
+}
+
+/* Lớp văn bản loading */
+.loading {
+  @apply text-white text-center py-20;
+}
+
+/* Lớp container cho PAGINATION (ở giữa trang) */
+.PAGINATION {
+  @apply w-full flex items-center justify-center my-20;
+}
+
+/* Lớp container cho các phần tử nút/input trong PAGINATION */
+.PAGINATION_HEADER {
+  @apply flex items-center space-x-3;
+}
+
+/* Lớp cơ bản cho nút PAGINATION (Prev/Next) */
+.i {
+  @apply h-[50px] w-[50px] rounded-full bg-[#2F3346] flex items-center justify-center;
+}
+
+/* Lớp cho nút Previous bị disable */
+.j {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Lớp hover cho nút Previous KHÔNG bị disable */
+.k {
+  @apply hover:bg-primary hover:text-black transition-colors;
+}
+
+
+/* Lớp container cho input Trang (Page Input) */
+.PAGINATIO_LAYOUTS {
+  @apply h-[50px] px-8 rounded-full bg-[#2F3346] flex items-center justify-center space-x-1.5;
+}
+
+/* Lớp text "Trang" và "/" */
+.PAGINATIO_PAGE {
+  @apply text-white text-sm;
+}
+
+/* Lớp input nhập số trang */
+.o {
+  @apply text-white w-auto text-[13px] text-center px-3 py-1.5 outline-0 rounded-md max-w-[50px] font-bold flex items-center justify-center border border-gray-600 focus:border-gray-500 bg-transparent; /* Đã bỏ placeholder:text-[#7a7c81]l vì nó là class utility tailwind, không phải giá trị CSS */
+}
+
+/* Lớp cho nút Next bị disable */
+.p {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Lớp hover cho nút Next KHÔNG bị disable (giống lớp k) */
+.q {
+  @apply hover:bg-primary hover:text-black transition-colors;
+}
+
+
+.PAGINATIO_ICON {
+  @apply text-white 
+}

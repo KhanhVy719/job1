@@ -1,0 +1,11 @@
+.a{
+   @apply pb-28 pt-5 px-5 lg:px-12
+}
+
+.b{
+   @apply text-2xl font-semibold text-white items-center flex space-x-3
+}
+
+.c{
+    @apply my-6
+}
