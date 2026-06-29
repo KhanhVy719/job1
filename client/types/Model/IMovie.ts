@@ -41,8 +41,8 @@ interface IMovie {
   };
   imdb?: {
     id: string;
-    vote_average: number;
-    vote_count: number;
+    vote_average?: number;
+    vote_count?: number;
   };
   is_copyright: boolean;
   sub_docquyen: boolean;

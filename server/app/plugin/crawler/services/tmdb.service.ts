@@ -352,6 +352,11 @@ class TmdbService {
 episode_total: episode_total,
 };
 
+      // IMDB id (từ TMDB external_ids) — chỉ lưu id để link sang imdb.com,
+      // không lấy điểm IMDB (cần API riêng như OMDb, đã bỏ).
+      const imdbId = detailVi.external_ids?.imdb_id;
+      if (imdbId) moviePayload.imdb = { id: imdbId };
+
 // PRE-FETCH metadata từng season (TÊN/THUMBNAIL tập) TRƯỚC transaction.
 // Mỗi season 1 HTTP call (bounded) — KHÔNG gọi mạng bên trong transaction.
 const seasonMetaMap: Record<number, Record<number, any>> = {};

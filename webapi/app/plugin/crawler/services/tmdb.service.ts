@@ -307,6 +307,11 @@ class TmdbService {
         episode_total: episode_total,
       };
 
+      // IMDB id (từ TMDB external_ids) — chỉ lưu id để link sang imdb.com,
+      // không lấy điểm IMDB (cần API riêng như OMDb, đã bỏ).
+      const imdbId = detail.external_ids?.imdb_id;
+      if (imdbId) moviePayload.imdb = { id: imdbId };
+
       // 5. Save Movie
       const movieDoc = await Movie.findOneAndUpdate(
         { "tmdb.id": tmdbId.toString() },
