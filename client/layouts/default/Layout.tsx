@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useMemo,ReactNode } from "react";
 import Auth from "@/sections/auth";
 import { useSearchFilters } from "@/hooks/useSearch";
 import dynamic from "next/dynamic";
-const Navbar = dynamic(() => import("@/Layouts/default/Navbar"), { ssr: false });
-const Sidebar = dynamic(() => import("@/Layouts/default/Sidebar"), { ssr: false });
+const Navbar = dynamic(() => import("@/layouts/default/Navbar"), { ssr: false });
+const Sidebar = dynamic(() => import("@/layouts/default/Sidebar"), { ssr: false });
 
 import { useAuthContext } from "@/context/AuthContext";
 

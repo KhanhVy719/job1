@@ -14,8 +14,8 @@ export type AppPropsWithLayout = AppProps & {
   pageProps: { user?: IUser | null; [key: string]: unknown };
 };
 
-const Layout = dynamic(() => import("@/Layouts/default/Layout"), { ssr: false });
-const Footer = dynamic(() => import("@/Layouts/default/Footer"), { ssr: false });
+const Layout = dynamic(() => import("@/layouts/default/Layout"), { ssr: false });
+const Footer = dynamic(() => import("@/layouts/default/Footer"), { ssr: false });
 
 const AppContent = ({ Component, pageProps }: AppPropsWithLayout) => {
   const getLayout = Component.getLayout ?? ((page) => page);

@@ -1,7 +1,6 @@
 # rophim-webapi — Express API (/api/v1) + ffmpeg/ffprobe + multer
 FROM node:20-slim
 
-ENV NODE_ENV=production
 WORKDIR /app
 
 # ffmpeg/ffprobe required by TiktokService; build tools for native modules
@@ -10,9 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 # tsx is invoked via `npx tsx` in start script but not declared — pin it
 RUN npm install --no-save tsx
+ENV NODE_ENV=production
 
 COPY . .
 

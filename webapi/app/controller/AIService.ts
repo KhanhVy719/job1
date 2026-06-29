@@ -32,7 +32,7 @@ const TITLE_HISTORY = new Set<string>();
 const MAX_HISTORY_SIZE = 2000;
 
 class AIService {
-  private static client = new Ollama({ host: "http://127.0.0.1:11434" });
+  private static client = new Ollama({ host: process.env.OLLAMA_HOST || "http://ollama:11434" });
   private static MODEL = "qwen2.5:1.5b";
 
   public static async initWorker() {

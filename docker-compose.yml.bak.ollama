@@ -60,8 +60,6 @@ services:
       URL: "0.0.0.0"
       PORT: "8001"
       NODE_ENV: production
-    depends_on:
-      - ollama
     ports:
       - "8001:8001"
     volumes:
@@ -102,14 +100,6 @@ services:
     restart: unless-stopped
 
 
-  ollama:
-    image: ollama/ollama:latest
-    # Local LLM cho AI Creative Worker (sinh tieu de section). Khong publish ra host.
-    volumes:
-      - ollama_data:/root/.ollama
-    networks: [rophim]
-    restart: unless-stopped
-
 networks:
   rophim:
     driver: bridge
@@ -122,4 +112,3 @@ volumes:
   server_upload:
   server_tmp:
   cdn_tmp:
-  ollama_data:

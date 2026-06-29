@@ -188,7 +188,7 @@ const MovieSlider: React.FC<{ movies: IMovie[] }> = ({ movies }) => {
       <Swiper
         modules={[Navigation]}
         spaceBetween={17}
-        loop={true}
+        loop={movies.length > 6}
         navigation={{
           prevEl: prevRef.current,
           nextEl: nextRef.current,
