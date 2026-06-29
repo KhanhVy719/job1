@@ -1,0 +1,32 @@
+# Secrets / local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Dependencies / builds
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Logs / dumps / backups
+*.log
+logs/
+*.dump
+*.archive
+*.gz
+*.tar
+*.zip
+backups/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
