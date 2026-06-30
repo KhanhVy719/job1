@@ -27,6 +27,10 @@ const MovieSlider: React.FC<{
     return () => clearTimeout(timer);
   }, []);
 
+  if (!movies?.length) {
+    return null;
+  }
+
   return (<>
     <div className="relative w-full  text-white overflow-hidden">
 

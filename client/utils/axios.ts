@@ -3,7 +3,15 @@ import https from "https";
 
 const isServer = typeof window === "undefined";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:4000";
+const DEFAULT_API_URL = "http://127.0.0.1:4000";
+const SERVER_API_URL =
+  process.env.NEXT_SERVER_API_URL ||
+  process.env.INTERNAL_API_URL ||
+  process.env.SERVER_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  DEFAULT_API_URL;
+const CLIENT_API_URL = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL;
+const API_URL = isServer ? SERVER_API_URL : CLIENT_API_URL;
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
