@@ -12,7 +12,7 @@ import {
   ALL_SECTIONS_CONFIG,
   QUERY_MAPPING,
   PRELOAD_KEYS,
-  VALID_IMAGE_CONSTRAINT,
+  publicMovieConstraint,
 } from "../Shared/shared";
 import AIService, { AICreativeSection } from "../AIService";
 
@@ -76,7 +76,7 @@ class HomeController {
   }
 
   private static async _buildQueryConfig(config: any) {
-    const baseQuery: any = { ...VALID_IMAGE_CONSTRAINT };
+    const baseQuery: any = publicMovieConstraint();
 
     switch (config.type) {
       case "category": {
@@ -178,7 +178,7 @@ class HomeController {
    */
   private static async _resolveCreativeQuery(aiData: AICreativeSection) {
     const { filters } = aiData;
-    const query: FilterQuery<any> = { ...VALID_IMAGE_CONSTRAINT };
+    const query: FilterQuery<any> = publicMovieConstraint();
     let sort: any = { updatedAt: -1 };
 
     // 1. Xử lý Thể loại (Category) -> Tìm ID từ slug AI đưa
@@ -285,7 +285,7 @@ class HomeController {
       // A. Lấy Slider
       const sliderTask = Movie.find({
         title_logo: { $ne: "" },
-        ...VALID_IMAGE_CONSTRAINT,
+        ...publicMovieConstraint(),
       })
         .sort({ updatedAt: -1 })
         .limit(6)

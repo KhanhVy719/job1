@@ -45,6 +45,7 @@ interface IMovie {
     vote_average?: number;
     vote_count?: number;
   };
+  zxc?: IZxcVerification;
   is_copyright: boolean;
   sub_docquyen: boolean;
   chieurap: boolean;
@@ -55,4 +56,20 @@ interface IMovie {
 interface IBadge {
   type: string; // 'ai_suggest', 'hot', 'new', 'vip'
   text: string; // 'AI Gợi Ý', 'Mới', 'Hot'
+}
+
+interface IZxcVerification {
+  status: "unknown" | "checking" | "available" | "missing" | "mismatch" | "error";
+  checkedAt?: Date;
+  verifiedAt?: Date;
+  reason?: string;
+  server?: string;
+  sourceCount?: number;
+  mediaType?: "movie" | "tv";
+  tmdbId?: string;
+  imdbId?: string;
+  season?: number;
+  episode?: number;
+  matchedTitle?: string;
+  matchedYear?: number;
 }

@@ -2,6 +2,7 @@ import mongoose, { Schema, type Document, type Model, type Types } from "mongoos
 
 import type { IMovie } from "./Movie";
 import type { ISeason } from "./Season";
+import { ZxcVerificationSchema, type IZxcVerification } from "./ZxcVerification";
 
 export enum VideoFormat {
   M3U8 = "m3u8",
@@ -104,6 +105,7 @@ export interface IEpisode extends Document {
   videos: IVideoResource[]; 
   audios: IAudioResource[];
   subtitles: ISubtitleResource[];
+  zxc?: IZxcVerification;
 
   sort_order: number;
   views: number;
@@ -143,6 +145,7 @@ const EpisodeSchema = new Schema<IEpisode>(
     videos: { type: [VideoSchema], default: [] },
     audios: { type: [AudioSchema], default: [] },
     subtitles: { type: [SubtitleSchema], default: [] },
+    zxc: { type: ZxcVerificationSchema, default: () => ({ status: "unknown" }) },
 
     sort_order: { type: Number, default: 1 },
     views: { type: Number, default: 0 },
@@ -158,6 +161,7 @@ EpisodeSchema.index(
   { season_id: 1, episode: 1 }, 
   { unique: true }
 );
+EpisodeSchema.index({ movie_id: 1, "zxc.status": 1 });
 
 const Episode: Model<IEpisode> = mongoose.models.Episode || mongoose.model<IEpisode>("Episode", EpisodeSchema);
 

@@ -28,6 +28,18 @@ export const VALID_IMAGE_CONSTRAINT = {
   thumb_url: { $ne: "" },
   poster_url: { $ne: "" },
 };
+
+export const isZxcVerifiedRequired = () =>
+  process.env.REQUIRE_ZXC_VERIFIED === "true";
+
+export const ZXC_AVAILABLE_CONSTRAINT = {
+  "zxc.status": "available",
+};
+
+export const publicMovieConstraint = () => ({
+  ...VALID_IMAGE_CONSTRAINT,
+  ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+});
 export const ALL_SECTIONS_CONFIG = [
   // --- HOT & TRENDING ---
   { title: "Phim Điện Ảnh Mới Coóng", slug: "phim-dien-anh-moi", type: "single_new", queryKey: "newSingleMovies" },

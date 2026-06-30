@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "npx tsx watch server.ts",
+    "verify:zxc": "npx tsx scripts/verify-zxc.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

@@ -3,6 +3,11 @@ import mongoose, { LeanDocument } from "mongoose";
 import Movie from "../../model/Movie";
 import Episode, { IEpisode, IVideoResource } from "../../model/Episode";
 import Season from "../../model/Season";
+import {
+  isZxcVerifiedRequired,
+  publicMovieConstraint,
+  ZXC_AVAILABLE_CONSTRAINT,
+} from "../Shared/shared";
 interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
@@ -14,19 +19,15 @@ const buildVidSrcEmbed = (
   episode?: number
 ): string => {
   if (!tmdbId) return "";
-  const legacyBase = (process.env.VIDSRC_BASE || "").replace(/\/+$/, "");
+  const zxcBase = (process.env.ZXC_BASE || "https://zxcstream.xyz").replace(/\/+$/, "");
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
-    (legacyBase
-      ? `${legacyBase}/embed/movie/{tmdbId}`
-      : "https://vidlux.xyz/embed/movie/{tmdbId}");
+    `${zxcBase}/player/movie/{tmdbId}`;
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
-    (legacyBase && !legacyBase.includes("cinesrc.st")
-      ? `${legacyBase}/embed/tv/{tmdbId}/{season}/{episode}`
-      : "https://vidlux.xyz/embed/tv/{tmdbId}/{season}/{episode}");
+    `${zxcBase}/player/tv/{tmdbId}/{season}/{episode}`;
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;
@@ -112,7 +113,10 @@ class MovieController {
   static getDetail = async (req: Request, res: Response) => {
     const { slug } = req.params;
     try {
-      const movie = await Movie.findOne({ slug })
+      const movie = await Movie.findOne({
+        slug,
+        ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+      })
         .populate("category", "name slug")
         .populate("country", "name slug code")
         .populate("actor", "name slug avatar aka")
@@ -141,8 +145,11 @@ class MovieController {
     const { slug: movieSlug, episode_slug: episodeSlug } = req.params;
 
     try {
-      const movie = await Movie.findOne({ slug: movieSlug })
-        .select("_id type tmdb")
+      const movie = await Movie.findOne({
+        slug: movieSlug,
+        ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+      })
+        .select("_id type tmdb zxc")
         .lean();
       if (!movie)
         return res
@@ -157,6 +164,16 @@ class MovieController {
         return res
           .status(404)
           .json({ status: false, message: "Tập phim không tồn tại" });
+
+      if (isZxcVerifiedRequired()) {
+        const sourceStatus = episode.zxc?.status || movie.zxc?.status;
+        if (sourceStatus !== "available") {
+          return res.status(404).json({
+            status: false,
+            message: "Nguồn ZXC của tập này chưa được xác minh",
+          });
+        }
+      }
 
       // Rebuild auto-provider embeds from current TMDB metadata; keep custom embeds.
       if (movie.tmdb?.id) {
@@ -203,7 +220,10 @@ class MovieController {
       const escapeRegex = (text: string) =>
         text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 
-      const currentMovie = await Movie.findOne({ slug })
+      const currentMovie = await Movie.findOne({
+        slug,
+        ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+      })
         .select({
           _id: 1,
           name: 1,
@@ -234,6 +254,7 @@ class MovieController {
         {
           $match: {
             _id: { $ne: currentMovie._id },
+            ...publicMovieConstraint(),
             type: currentMovie.type,
             $or: [
               { category: { $in: currentMovie.category } },

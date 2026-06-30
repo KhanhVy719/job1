@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import Studio from "../../model/Studio";
 import Movie from "../../model/Movie";
-import { paginateResult, VALID_IMAGE_CONSTRAINT } from "../Shared/shared";
+import { paginateResult, publicMovieConstraint } from "../Shared/shared";
 
 
 class StudioController {
@@ -44,7 +44,7 @@ class StudioController {
       const parent = await Studio.findOne({ slug }).select("_id").lean();
       if (!parent) return res.json({ status: false, message: "Không tìm thấy dữ liệu" });
 
-      const query = { studio: parent._id, ...VALID_IMAGE_CONSTRAINT };
+      const query = { studio: parent._id, ...publicMovieConstraint() };
       const result = await paginateResult(
         Movie,
         query,

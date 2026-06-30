@@ -172,6 +172,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
 
   const [encryptedPayload, setEncryptedPayload] = useState<Record<string, unknown> | null>(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [loadedSourceEpisodeId, setLoadedSourceEpisodeId] = useState("");
+  const [sourceError, setSourceError] = useState("");
   const [serverIndex, setServerIndex] = useState(0);
 
   const [proposals, setProposals] = useState<IMovie[]>(initialProposals);
@@ -339,6 +341,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     lastPlaybackRequestRef.current = playbackRequestKey;
 
     setEncryptedPayload(null);
+    setLoadedSourceEpisodeId("");
+    setSourceError("");
     try {
       const res = await axiosInstance.get(API_ENDPOINTS.movie.watch(slug as string, epSlug));
       const payload = res.data?.data || res.data?.playlist?.[0];
@@ -351,6 +355,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
 
         // Luôn cập nhật episode từ API để nhận embed_url fallback cho dữ liệu cũ.
         setCurrentEpData((prev) => prev ? { ...prev, ...payloadEpisode } : payloadEpisode);
+        setLoadedSourceEpisodeId(payloadEpisode._id);
 
         if (!hasSelfHosted) {
           setEncryptedPayload(null);
@@ -613,8 +618,14 @@ const XemPhim: NextPage<IPageProps> = (props) => {
 
         const enc = create(info, "/0_8b2:");
         setEncryptedPayload({ ...enc, s: realtime, t: dynamicData, type: selectedType });
+      } else {
+        lastPlaybackRequestRef.current = "";
+        setSourceError("Chưa có nguồn phát đã xác minh cho tập này.");
       }
-    } catch { }
+    } catch {
+      lastPlaybackRequestRef.current = "";
+      setSourceError("Nguồn phát chưa được xác minh hoặc không có trên ZXC.");
+    }
   }, [slug, serverIndex, type, currentType, dynamicData]);
 
   const handleSeasonChange = (item: { id: string }) => {
@@ -775,7 +786,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   });
   const activeEmbedServer = embedServerOptions[0];
   const embedPlayerUrl = activeEmbedServer?.url || "";
-  const playerSrc = hasSelfHostedVideo ? `${CDN_URL}/?v=captcha-query-20260628-1` : embedPlayerUrl;
+  const hasLoadedSource = !!currentEpData?._id && loadedSourceEpisodeId === currentEpData._id;
+  const playerSrc = hasLoadedSource ? (hasSelfHostedVideo ? `${CDN_URL}/?v=captcha-query-20260628-1` : embedPlayerUrl) : "";
   const seoTitle = `${movie.name} (${movie.year}) ${movie.quality || 'HD'} Vietsub - Xem Phim ${movie.origin_name || ''}`;
   const seoDesc = movie.content ? movie.content.replace(/<[^>]*>?/gm, '').substring(0, 160) + "..." : `Xem phim ${movie.name} full HD...`;
   const sessionSlug = sessions.find(s => s._id === currentSeasonId)?.slug;
@@ -831,7 +843,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-black text-white text-sm">
-              Chưa có nguồn phát cho tập này.
+              {sourceError || "Đang kiểm tra nguồn phát..."}
             </div>
           )}
           {playerSrc && !iframeLoaded && (<div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20"><span className="text-white text-sm">Đang tải player...</span></div>)}

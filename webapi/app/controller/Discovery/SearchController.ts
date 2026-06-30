@@ -3,7 +3,7 @@ import { FilterQuery, PipelineStage } from "mongoose";
 import Movie from "../../model/Movie";
 import Category from "../../model/Category";
 import Country from "../../model/Country";
-import { SearchParams, toSlug } from "../Shared/shared";
+import { publicMovieConstraint, SearchParams, toSlug } from "../Shared/shared";
 import AIService from "../AIService";
 
 class SearchController {
@@ -26,10 +26,7 @@ class SearchController {
   ) {
     const { q, years, status, type, quality, chieurap } = params;
 
-    const match: FilterQuery<any> = {
-      thumb_url: { $ne: "" },
-      poster_url: { $ne: "" },
-    };
+    const match: FilterQuery<any> = publicMovieConstraint();
 
     if (ids.cat) match.category = ids.cat;
     if (ids.country) match.country = ids.country;

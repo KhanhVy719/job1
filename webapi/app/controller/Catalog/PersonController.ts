@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import Actor from "../../model/Actor";
 import Movie from "../../model/Movie";
-import { paginateResult, VALID_IMAGE_CONSTRAINT } from "../Shared/shared";
+import { paginateResult, publicMovieConstraint } from "../Shared/shared";
 
 
 class PersonController {
@@ -41,7 +41,7 @@ class PersonController {
       const parent = await Actor.findOne({ slug }).select("_id").lean();
       if (!parent) return res.json({ status: false, message: "Không tìm thấy dữ liệu" });
 
-      const query = { actor: parent._id, ...VALID_IMAGE_CONSTRAINT };
+      const query = { actor: parent._id, ...publicMovieConstraint() };
       const result = await paginateResult(
         Movie,
         query,

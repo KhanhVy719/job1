@@ -50,6 +50,7 @@ interface IEpisode {
   videos: IVideo[];
   audios: IAudio[];
   subtitles: ISubtitle[];
+  zxc?: IZxcVerification;
 
   // System
   sort_order: number;

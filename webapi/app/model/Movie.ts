@@ -8,6 +8,7 @@ import type { IActor } from "./Actor";
 import type { ICountry } from "./Country";
 import type { IStudio } from "./Studio";
 import type { ISeason } from "./Season";
+import { ZxcVerificationSchema, type IZxcVerification } from "./ZxcVerification";
 
 export interface IMovie extends Document {
   _id: Types.ObjectId;
@@ -58,6 +59,7 @@ export interface IMovie extends Document {
     vote_average: number;
     vote_count: number;
   };
+  zxc?: IZxcVerification;
   is_copyright: boolean;
   sub_docquyen: boolean;
   chieurap: boolean;
@@ -115,6 +117,7 @@ const movieSchema = new Schema<IMovie>(
       vote_average: { type: Number },
       vote_count: { type: Number },
     },
+    zxc: { type: ZxcVerificationSchema, default: () => ({ status: "unknown" }) },
     is_copyright: { type: Boolean, default: false },
     sub_docquyen: { type: Boolean, default: false },
     chieurap: { type: Boolean, default: false },
@@ -134,6 +137,8 @@ movieSchema.index({ view: -1 });
 movieSchema.index({ type: 1, status: 1, year: -1 });
 movieSchema.index({ type: 1, view: -1 });
 movieSchema.index({ createdAt: -1 });
+movieSchema.index({ "zxc.status": 1, updatedAt: -1 });
+movieSchema.index({ "zxc.status": 1, view: -1 });
 
 const Movie: Model<IMovie> = mongoose.models.Movie || mongoose.model<IMovie>("Movie", movieSchema);
 
