@@ -9,6 +9,7 @@ import { NextSeo, VideoJsonLd } from 'next-seo';
 import clsx from "clsx";
 
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { useAccountMovieActions } from "@/hooks/useAccountMovieActions";
 import { Encrypt } from "@/utils/crypto/fly";
 import { create } from "@/utils/crypto/fly2";
 import { withEncryptedProps } from '@/utils/server-props';
@@ -169,6 +170,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const { slug, tap, phan, type } = router.query;
   const playerRef = useRef<HTMLIFrameElement>(null);
   const lastPlaybackRequestRef = useRef<string>("");
+  const lastHistorySyncRef = useRef<string>("");
 
   const [encryptedPayload, setEncryptedPayload] = useState<Record<string, unknown> | null>(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
@@ -187,6 +189,13 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const [skipIntro, setSkipIntro] = useState(false);
 
   const [movie] = useState<IMovie | null>(initialMovie);
+  const {
+    favoriteLoading,
+    isAuthenticated,
+    isFavorite,
+    recordHistory,
+    toggleFavorite,
+  } = useAccountMovieActions(movie);
   const [sessions] = useState<ISeason[]>(initialSessions || []);
 
   const CDN_URL = process.env.NEXT_PUBLIC_CDN || "http://localhost:5000";
@@ -259,6 +268,16 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const toggleNext = () => setAutoNext(p => { const v = !p; localStorage.setItem('setting_auto_next', JSON.stringify(v)); return v; });
   const toggleIntro = () => setSkipIntro(p => { const v = !p; localStorage.setItem('setting_skip_intro', JSON.stringify(v)); return v; });
   const toggleTheater = () => setTheaterMode(p => { const v = !p; localStorage.setItem('setting_theater_mode', JSON.stringify(v)); return v; });
+
+  useEffect(() => {
+    if (!isAuthenticated || !movie?._id || !currentEpData?._id) return;
+
+    const historyKey = `${movie._id}:${currentEpData._id}`;
+    if (lastHistorySyncRef.current === historyKey) return;
+
+    lastHistorySyncRef.current = historyKey;
+    void recordHistory({ silent: true });
+  }, [currentEpData?._id, isAuthenticated, movie?._id, recordHistory]);
 
   const partItems = useMemo(() => sessions.map(s => ({ id: s._id, name: s.name, slug: s.slug || "" })), [sessions]);
 
@@ -851,7 +870,20 @@ const XemPhim: NextPage<IPageProps> = (props) => {
         <div className='md:rounded-b-xl bg-[#08080A] py-3'>
           <div className='flex justify-between w-full px-5'>
             <div className='flex items-center space-x-3'>
-              <button className='flex items-center px-3 py-2 text-white space-x-2 hover:bg-primary/5 hover:text-primary rounded-lg'><i className="fas fa-heart text-xs"></i><span className='hidden md:flex'>Yêu thích</span></button>
+              <button
+                type="button"
+                aria-pressed={isFavorite}
+                disabled={favoriteLoading}
+                onClick={toggleFavorite}
+                className={clsx(
+                  'flex items-center px-3 py-2 space-x-2 hover:bg-primary/5 hover:text-primary rounded-lg disabled:opacity-60',
+                  isFavorite ? 'text-primary bg-primary/10' : 'text-white',
+                  !isAuthenticated && 'open-login'
+                )}
+              >
+                <i className="fas fa-heart text-xs"></i>
+                <span className='hidden md:flex'>{isFavorite ? "Đã thích" : "Yêu thích"}</span>
+              </button>
               <button onClick={toggleNext} className={`hidden lg:flex items-center px-3 py-2 ${autoNext ? "text-primary bg-primary/10" : "hover:bg-white/5 text-white"} space-x-2 rounded-lg`}><span>Chuyển tập</span><span className={`border px-2 py-1 text-[10px] rounded-md ${autoNext ? "text-primary border-primary" : " text-white border-gray-500"}`}>{autoNext ? "ON" : "OFF"}</span></button>
               <button onClick={toggleTheater} className={`hidden lg:flex relative z-[15] items-center px-3 py-2 ${theaterMode ? "text-primary bg-primary/10" : "hover:bg-white/5 text-white"} space-x-2 rounded-lg`}><span>Rạp phim</span><span className={`border px-2 py-1 text-[10px] rounded-md ${theaterMode ? "text-primary border-primary" : " text-white border-gray-500"}`}>{theaterMode ? "ON" : "OFF"}</span></button>
               <button onClick={toggleIntro} className={`hidden lg:flex items-center px-3 py-2 ${skipIntro ? "text-primary bg-primary/10" : "hover:bg-white/5 text-white"} space-x-2 rounded-lg`}><span>Bỏ qua giới thiệu</span><span className={`border px-2 py-1 text-[10px] rounded-md ${skipIntro ? "text-primary border-primary" : " text-white border-gray-500"}`}>{skipIntro ? "ON" : "OFF"}</span></button>

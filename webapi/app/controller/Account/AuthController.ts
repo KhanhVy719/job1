@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import User, { IUser } from "../../model/User"; // Import cả Interface IUser
 import Playlist from "../../model/Playlist";
+import Movie from "../../model/Movie";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { Types } from "mongoose";
 
 // Bắt buộc đọc từ ENV. Không có fallback hardcode (lộ secret = giả mạo được mọi JWT).
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
@@ -135,6 +137,94 @@ class AuthController {
       
       res.status(400).json({ 
         message: errorMessage 
+      });
+    }
+  };
+
+  static toggleFavorite = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = (req as any).user;
+      const { movieId } = req.params;
+
+      if (!currentUser) throw new Error("Thiếu thông tin xác thực");
+      if (!Types.ObjectId.isValid(movieId)) throw new Error("Phim không hợp lệ");
+
+      const movieExists = await Movie.exists({ _id: movieId });
+      if (!movieExists) throw new Error("Phim không tồn tại");
+
+      const user = await User.findById(currentUser._id).select("favorites");
+      if (!user) throw new Error("User không tồn tại");
+
+      const isFavorite = user.favorites.some(
+        (favoriteId: any) => favoriteId.toString() === movieId
+      );
+
+      if (isFavorite) {
+        await User.findByIdAndUpdate(currentUser._id, {
+          $pull: { favorites: movieId },
+        });
+      } else {
+        await User.findByIdAndUpdate(currentUser._id, {
+          $addToSet: { favorites: movieId },
+        });
+      }
+
+      res.json({
+        status: true,
+        message: isFavorite
+          ? "Đã xóa khỏi yêu thích"
+          : "Đã thêm vào yêu thích",
+        data: {
+          favorited: !isFavorite,
+        },
+      });
+    } catch (error: unknown) {
+      let errorMessage = "Lỗi cập nhật yêu thích";
+      if (error instanceof Error) errorMessage = error.message;
+
+      res.status(400).json({
+        status: false,
+        message: errorMessage,
+      });
+    }
+  };
+
+  static addToHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = (req as any).user;
+      const { movieId } = req.params;
+
+      if (!currentUser) throw new Error("Thiếu thông tin xác thực");
+      if (!Types.ObjectId.isValid(movieId)) throw new Error("Phim không hợp lệ");
+
+      const movieExists = await Movie.exists({ _id: movieId });
+      if (!movieExists) throw new Error("Phim không tồn tại");
+
+      await User.findByIdAndUpdate(currentUser._id, {
+        $pull: { history: { movie: movieId } },
+      });
+
+      await User.findByIdAndUpdate(currentUser._id, {
+        $push: {
+          history: {
+            $each: [{ movie: movieId, watchedAt: new Date() }],
+            $position: 0,
+            $slice: 100,
+          },
+        },
+      });
+
+      res.json({
+        status: true,
+        message: "Đã lưu lịch sử xem",
+      });
+    } catch (error: unknown) {
+      let errorMessage = "Lỗi lưu lịch sử xem";
+      if (error instanceof Error) errorMessage = error.message;
+
+      res.status(400).json({
+        status: false,
+        message: errorMessage,
       });
     }
   };

@@ -12,6 +12,7 @@ import CommentItems from "@/sections/film/Comment";
 import RatedItems from "@/sections/film/Rated";
 import ActorList from "@/components/Actor/FilmList";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { useAccountMovieActions } from "@/hooks/useAccountMovieActions";
 import styles from './styles.module.css';
 import LoadingOverlay from "@/components/loading/loader";
 import { GetServerSideProps, NextPage } from 'next';
@@ -100,6 +101,12 @@ const Phim: NextPageWithCustomProps = ({ initialMovie, initialSessions, initialE
 
   // State
   const [movie, setMovie] = useState<IMovie | null>(initialMovie);
+  const {
+    favoriteLoading,
+    isAuthenticated,
+    isFavorite,
+    toggleFavorite,
+  } = useAccountMovieActions(movie);
   // Thay thế `any[]` bằng interface cụ thể
   const [theatricals, setTheatricals] = useState<ITheatricalItem[]>([]);
   const [proposals, setProposals] = useState<IMovie[]>(initialProposals);
@@ -621,9 +628,21 @@ const Phim: NextPageWithCustomProps = ({ initialMovie, initialSessions, initialE
                 <div className='flex-row items-center lg:mt-0 mt-6 lg:w-[-webkit-fill-available] flex justify-between'>
                   <div className='flex items-center space-x-3 lg:space-x-4 lg:ml-9'>
                     {/* Action Buttons (Yêu thích, Thêm, Chia sẻ, Bình luận) */}
-                    <button className='flex flex-col items-center h-[4rem] px-4 rounded-lg space-y-1 justify-center hover:bg-[#ffffff05] hover:text-primary '>
+                    <button
+                      type="button"
+                      aria-pressed={isFavorite}
+                      disabled={favoriteLoading}
+                      onClick={toggleFavorite}
+                      className={clsx(
+                        'flex flex-col items-center h-[4rem] px-4 rounded-lg space-y-1 justify-center hover:bg-[#ffffff05] hover:text-primary disabled:opacity-60',
+                        isFavorite ? 'text-primary bg-primary/10' : 'text-white',
+                        !isAuthenticated && 'open-login'
+                      )}
+                    >
                       <icon.Love className='lg:w-[18px] w-[15px]' width={18} height={18} />
-                      <span className='text-white lg:text-sm text-xs'>Yêu thích</span>
+                      <span className={clsx('lg:text-sm text-xs', isFavorite ? 'text-primary' : 'text-white')}>
+                        {isFavorite ? "Đã thích" : "Yêu thích"}
+                      </span>
                     </button>
                     <button className='flex flex-col items-center h-[4rem] px-4 rounded-lg space-y-1 justify-center hover:bg-[#ffffff05] hover:text-primary '>
                       <icon.Add className='lg:w-[18px] w-[15px]' width={18} height={18} />

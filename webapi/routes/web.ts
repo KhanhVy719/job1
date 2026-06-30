@@ -49,5 +49,7 @@ Router.post("/comments/:id/vote", Guest, CommentController.vote);
 Router.post("/auth/login", AuthController.Login);
 Router.post("/auth/register", AuthController.Register);
 Router.get("/auth/me",Guest, AuthController.getProfile);
+Router.post("/auth/favorites/:movieId", Guest, AuthController.toggleFavorite);
+Router.post("/auth/history/:movieId", Guest, AuthController.addToHistory);
 
 export default Router;
