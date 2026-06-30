@@ -249,9 +249,16 @@ function svgDataUri(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function seekIconSvg(direction) {
+  if (direction === 'forward') {
+    return svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M43 13h10v10" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M53 13c-4-4-10-7-17-7-14 0-25 11-25 25s11 25 25 25c8 0 15-4 20-10" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M43 27v14l11-7-11-7z" fill="#fff"/><text x="28" y="39" fill="#fff" font-size="13" font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">10</text></svg>');
+  }
+  return svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M21 13H11v10" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 13c4-4 10-7 17-7 14 0 25 11 25 25S42 56 28 56c-8 0-15-4-20-10" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 27v14l-11-7 11-7z" fill="#fff"/><text x="36" y="39" fill="#fff" font-size="13" font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">10</text></svg>');
+}
+
 const playerButtonIcons = {
-  rewind: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M17 11a15 15 0 1 0 12-1"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M17 11h9V2"/><text x="24" y="30" fill="#fff" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">10</text></svg>'),
-  forward: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M31 11a15 15 0 1 1-12-1"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M31 11h-9V2"/><text x="24" y="30" fill="#fff" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">10</text></svg>'),
+  rewind: seekIconSvg('rewind'),
+  forward: seekIconSvg('forward'),
 };
 
 function seekRelative(player, deltaSeconds) {
@@ -272,10 +279,45 @@ function addPlayerButton(player, icon, tooltip, id, onClick) {
   } catch (_) {}
 }
 
+function findPlayerButton(container, id, tooltip) {
+  return container.querySelector(`.rop-${id}`)
+    || container.querySelector(`.jw-icon-${id}`)
+    || container.querySelector(`[aria-label="${tooltip}"]`)
+    || container.querySelector(`[title="${tooltip}"]`);
+}
+
+function positionPlayerSeekButtons(player) {
+  try {
+    const container = player.getContainer?.();
+    const buttonContainer = container?.querySelector('.jw-button-container');
+    if (!buttonContainer) return;
+
+    const rewindButton = findPlayerButton(buttonContainer, 'seek-rewind-10', 'Lui 10s');
+    const forwardButton = findPlayerButton(buttonContainer, 'seek-forward-10', 'Tien 10s');
+    const playButton = buttonContainer.querySelector('.jw-icon-playback');
+    const rightAnchor = buttonContainer.querySelector('.jw-icon-settings')
+      || buttonContainer.querySelector('.jw-icon-pip')
+      || buttonContainer.querySelector('.jw-icon-fullscreen');
+
+    if (rewindButton) {
+      rewindButton.classList.add('rop-seek-left');
+      if (playButton && playButton.parentElement === buttonContainer) playButton.after(rewindButton);
+      else buttonContainer.prepend(rewindButton);
+    }
+    if (forwardButton) {
+      forwardButton.classList.add('rop-seek-right');
+      if (rightAnchor && rightAnchor.parentElement === buttonContainer) buttonContainer.insertBefore(forwardButton, rightAnchor);
+      else buttonContainer.appendChild(forwardButton);
+    }
+  } catch (_) {}
+}
+
 function enhanceJwPlayer(player) {
   const addButtons = () => {
     addPlayerButton(player, playerButtonIcons.rewind, 'Lui 10s', 'seek-rewind-10', () => seekRelative(player, -10));
     addPlayerButton(player, playerButtonIcons.forward, 'Tien 10s', 'seek-forward-10', () => seekRelative(player, 10));
+    positionPlayerSeekButtons(player);
+    setTimeout(() => positionPlayerSeekButtons(player), 0);
   };
 
   try {
