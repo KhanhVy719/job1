@@ -97,12 +97,16 @@ select {
   opacity: 0.85;
 }
 
-.auth-panel > * {
+.auth-panel > :not(.auth-close) {
   position: relative;
   z-index: 1;
 }
 
 .auth-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
   transition: color 160ms ease, transform 160ms ease, background-color 160ms ease;
 }
 
