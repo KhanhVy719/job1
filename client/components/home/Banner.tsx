@@ -121,8 +121,8 @@ const MovieSlider: React.FC<{
 
                       <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2">
                         {movie.category.map((genre, i) => (
-                           /* FIX: Added 'pointer-events-auto' so these specific links can be clicked */
-                          <div key={i} className="pointer-events-auto">
+                           /* Only active slide controls should receive pointer events. */
+                          <div key={i} className={isActive ? "pointer-events-auto" : "pointer-events-none"}>
                             <Link href={`/c/${genre.slug}`} className="text-xs bg-white/10 hover:text-primary px-2 py-1 rounded transition-colors">
                               {genre.name}
                             </Link>
@@ -134,10 +134,11 @@ const MovieSlider: React.FC<{
                         {movie.content}
                       </p>
                       
-                      <div className="pt-3 hidden items-center gap-4 lg:flex pointer-events-auto">
+                      <div className={`pt-3 hidden items-center gap-4 lg:flex ${isActive ? "pointer-events-auto" : "pointer-events-none"}`}>
                         <Link
                           href={playHref}
                           aria-label={`Xem ngay ${movie.name}`}
+                          tabIndex={isActive ? 0 : -1}
                           draggable={false}
                           onPointerDown={(event) => {
                             if (event.button !== 0) return;
