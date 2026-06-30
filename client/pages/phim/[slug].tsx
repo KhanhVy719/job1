@@ -116,11 +116,9 @@ const Phim: NextPageWithCustomProps = ({ initialMovie, initialSessions, initialE
   );
 
   const [CMT, setCMT] = useState("comment");
-  const [text, setText] = useState("");
-  const MAX_COMMENT = 1000;
+  const [commentCount, setCommentCount] = useState(0);
 
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [isReveal, setIsReveal] = useState(false);
 
   const [showTrailer, setShowTrailer] = useState(false);
   const [currentTrailerUrl, setCurrentTrailerUrl] = useState("");
@@ -130,7 +128,6 @@ const Phim: NextPageWithCustomProps = ({ initialMovie, initialSessions, initialE
   );
 
   const handleToggleCollapse = useCallback(() => setIsCollapsed(prev => !prev), []);
-  const handleToggleReveal = useCallback(() => setIsReveal(prev => !prev), []);
   const galleryRef = useRef<HTMLDivElement>(null);
 
   const getEmbedUrl = (url: string) => {
@@ -883,7 +880,7 @@ const Phim: NextPageWithCustomProps = ({ initialMovie, initialSessions, initialE
               <div className='mt-10 lg:mt-14 xl:mt-16'>
                 <div className='flex items-center'>
                   <icon.Comment width={34} />
-                  <div className='text-white text-lg lg:text-xl font-medium ml-1 lg:ml-2'>Bình luận (111)</div>
+                  <div className='text-white text-lg lg:text-xl font-medium ml-1 lg:ml-2'>Bình luận ({commentCount})</div>
                   {/* Comment/Rating Toggle */}
                   <div className='flex items-center border border-white p-1 rounded-lg ml-auto lg:ml-8'>
                     {BottomItems.map((item) => (
@@ -894,47 +891,7 @@ const Phim: NextPageWithCustomProps = ({ initialMovie, initialSessions, initialE
                   </div>
                 </div>
                 {CMT === "comment" ? (
-                  <>
-                    <div className='flex items-center space-x-3 mt-6'>
-                      <Image src="/images/logo_rox.svg" alt='...' width={46} height={48} className='object-cover rounded-full border-white border-2' />
-                      <div className='flex flex-col'>
-                        <div className='text-gray-400 text-xs'>Bình luận với tên</div>
-                        <div className='text-white font-medium text-sm mt-1'>Thanh Tùng Vương</div>
-                      </div>
-                    </div>
-                    {/* Comment Input */}
-                    <div className='mt-4 px-3 py-3 rounded-xl bg-[#ffffff10]'>
-                      <div className='relative'>
-                        <textarea
-                          className={`border-transparent border p-2 rounded-lg bg-bg-body w-full outline-none resize-none overflow-hidden ${text.length > MAX_COMMENT ? "border-red-500" : ""}`}
-                          rows={4}
-                          maxLength={MAX_COMMENT + 100}
-                          placeholder="Viết bình luận"
-                          value={text}
-                          onChange={(e) => {
-                            setText(e.target.value);
-                            e.target.style.height = "auto";
-                            e.target.style.height = `${e.target.scrollHeight}px`;
-                          }}
-                        />
-                        <div className={`absolute top-[6px] right-[10px] rounded-lg px-1 py-1 text-[11px] ${text.length > MAX_COMMENT ? "text-red-400" : "text-gray-400"}`}>{text.length}/{MAX_COMMENT}</div>
-                        {text.length > MAX_COMMENT && <p className="text-xs text-red-400 mt-1">Bạn đã vượt quá giới hạn ký tự!</p>}
-                      </div>
-                      <div className='my-1.5 flex justify-between items-center'>
-                        <button onClick={handleToggleReveal} className='flex items-center space-x-2 cursor-pointer'>
-                          <div className={clsx("relative flex-shrink-0 rounded-2xl w-[30px] border h-[18px] transition-colors duration-300", isReveal ? 'bg-primary/10 border-primary' : ' border-gray-600')}>
-                            <span className={clsx("absolute h-[8px] w-[8px] rounded-[20px] transition-all duration-300 ease-in-out", "top-[4px]", isReveal ? "bg-primary left-[18px]" : "bg-gray-600 left-[4px]")}></span>
-                          </div>
-                          <span className='text-white text-[13px] '>Tiết lộ?</span>
-                        </button>
-                        <button className='flex items-center space-x-2 text-primary' disabled={text.length === 0 || text.length > MAX_COMMENT}>
-                          <span className='font-medium text-sm'>Gửi</span>
-                          <icon.Send width={20} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className='mt-8 space-y-4'><CommentItems /></div>
-                  </>
+                  <CommentItems movieId={movie?._id} onCountChange={setCommentCount} />
                 ) : (<><RatedItems /></>)}
               </div>
             </div>

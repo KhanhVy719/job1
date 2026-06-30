@@ -126,4 +126,13 @@ export const API_ENDPOINTS = {
     login: "/api/v1/auth/login",
     register: "/api/v1/auth/register",
   },
+
+  comments: {
+    list: "/api/v1/comments",
+    create: "/api/v1/comments",
+    latest: "/api/v1/comments/latest",
+    top: "/api/v1/comments/top",
+    activeMovies: "/api/v1/comments/active-movies",
+    vote: (id: string) => `/api/v1/comments/${id}/vote`,
+  },
 };

@@ -12,7 +12,7 @@ import Link from "next/link";
 import type { Swiper as SwiperType } from "swiper";
 
 interface Comment {
-    id: number;
+    id: number | string;
     imageUrl: string;
     userAvatarUrl: string;
     userName: string;
@@ -28,12 +28,20 @@ const CommentSwiper: React.FC<{ comments: Comment[] }> = ({ comments }) => {
     const prevRef = useRef<HTMLDivElement | null>(null);
     const nextRef = useRef<HTMLDivElement | null>(null);
 
+    if (comments.length === 0) {
+        return (
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-gray-400">
+                Chưa có top bình luận.
+            </div>
+        );
+    }
+
     return (
         <div className="relative w-full">
             <Swiper
                 modules={[Navigation]}
                 spaceBetween={17}
-                loop={true}
+                loop={comments.length > 5}
                 navigation={{
                     prevEl: prevRef.current,
                     nextEl: nextRef.current,

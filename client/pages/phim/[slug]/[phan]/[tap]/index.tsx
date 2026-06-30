@@ -153,15 +153,12 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const [proposals, setProposals] = useState<IMovie[]>(initialProposals);
   const [isPart, setIsPart] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("comment");
+  const [commentCount, setCommentCount] = useState(0);
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const [isReveal, setIsReveal] = useState(false);
 
   const [autoNext, setAutoNext] = useState(true);
   const [theaterMode, setTheaterMode] = useState(false);
   const [skipIntro, setSkipIntro] = useState(false);
-
-  const MAX_COMMENT = 1000;
-  const [commentText, setCommentText] = useState("");
 
   const [movie] = useState<IMovie | null>(initialMovie);
   const [sessions] = useState<ISeason[]>(initialSessions || []);
@@ -922,7 +919,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
               )}
 
               <div className='flex items-center mt-12'>
-                <icon.Comment width={34} className='text-white' /><div className='text-white text-lg lg:text-xl font-medium ml-1 lg:ml-2'>Bình luận</div>
+                <icon.Comment width={34} className='text-white' /><div className='text-white text-lg lg:text-xl font-medium ml-1 lg:ml-2'>Bình luận ({commentCount})</div>
                 <div className='flex items-center border border-white p-1 rounded-lg ml-auto lg:ml-8'>
                   {BottomItems.map(item => (
                     <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex items-center gap-1 px-2 py-1 rounded transition-all duration-200 text-xs ${activeTab === item.id ? "text-black bg-white" : "text-white hover:text-primary"}`}>{item.label}</button>
@@ -931,24 +928,11 @@ const XemPhim: NextPage<IPageProps> = (props) => {
               </div>
 
               {activeTab == "comment" ? (
-                <>
-                  <div className='mt-4 px-3 py-3 rounded-xl bg-[#ffffff10]'>
-                    <div className='relative'>
-                      <textarea className={`border-transparent border p-2 rounded-lg bg-bg-body w-full outline-none resize-none overflow-hidden ${commentText.length > MAX_COMMENT ? "border-red-500" : ""}`} rows={4} maxLength={MAX_COMMENT + 100} placeholder="Viết bình luận" value={commentText} onChange={(e) => { setCommentText(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }} />
-                      <div className={`absolute top-[6px] right-[10px] rounded-lg px-1 py-1 text-[11px] ${commentText.length > MAX_COMMENT ? "text-red-400" : "text-gray-400"}`}>{commentText.length}/{MAX_COMMENT}</div>
-                    </div>
-                    <div className='my-1.5 flex justify-between items-center'>
-                      <button onClick={() => setIsReveal(!isReveal)} className='flex items-center space-x-2 cursor-pointer'>
-                        <div className={clsx("relative flex-shrink-0 rounded-2xl w-[30px] border h-[18px] transition-colors duration-300", isReveal ? 'bg-primary/10 border-primary' : 'border-gray-600')}>
-                          <span className={clsx("absolute h-[8px] w-[8px] rounded-[20px] transition-all duration-300 ease-in-out", "top-[4px]", isReveal ? "bg-primary left-[18px]" : "bg-gray-600 left-[4px]")}></span>
-                        </div>
-                        <span className='text-white text-[13px]'>Tiết lộ?</span>
-                      </button>
-                      <button className='flex items-center space-x-2 text-primary'><span className='font-medium text-sm'>Gửi</span><icon.Send width={20} /></button>
-                    </div>
-                  </div>
-                  <div className='mt-8 space-y-4'><CommentItems /></div>
-                </>
+                <CommentItems
+                  movieId={movie?._id}
+                  episodeId={currentEpData?._id}
+                  onCountChange={setCommentCount}
+                />
               ) : <RatedItems />}
             </div>
           </div>

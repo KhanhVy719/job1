@@ -29,6 +29,14 @@ const TrendIcon: React.FC<{ trend?: TopListItem["trend"] }> = ({ trend }) => {
 const TopList: React.FC<Props> = ({ items, limit, onViewMore, viewMoreLabel = "Xem thêm" }) => {
   const list = typeof limit === "number" ? items.slice(0, limit) : items;
 
+  if (list.length === 0) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-6 text-sm text-gray-400">
+        Chưa có dữ liệu.
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="space-y-3">
@@ -61,14 +69,17 @@ const TopList: React.FC<Props> = ({ items, limit, onViewMore, viewMoreLabel = "X
         ))}
       </div>
 
-      <div className="mt-4 ml-1 text-start">
-        <button
-          onClick={onViewMore}
-          className="text-xs text-gray-400 hover:text-primary"
-        >
-          {viewMoreLabel}
-        </button>
-      </div>
+      {onViewMore && (
+        <div className="mt-4 ml-1 text-start">
+          <button
+            onClick={onViewMore}
+            className="text-xs text-gray-400 hover:text-primary"
+            type="button"
+          >
+            {viewMoreLabel}
+          </button>
+        </div>
+      )}
     </>
   );
 };

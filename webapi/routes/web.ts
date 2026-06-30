@@ -6,6 +6,7 @@ import MovieController from "../app/controller/Film/MovieController";
 import SearchController from "../app/controller/Discovery/SearchController";
 import HomeController from "../app/controller/Discovery/HomeController";
 import AuthController from "../app/controller/Account/AuthController";
+import CommentController from "../app/controller/Social/CommentController";
 
 import Guest from "../app/middleware/Guest";
 
@@ -37,6 +38,13 @@ Router.get("/duyet-tim",      SearchController.search);
 Router.get("/home", HomeController.getHomeData);
 Router.get("/lich-chieu", HomeController.getScheduledMovies);
 Router.get("/showtimes/by-date/:date", HomeController.getShowtimesByDate);
+
+Router.get("/comments", CommentController.list);
+Router.get("/comments/latest", CommentController.latest);
+Router.get("/comments/top", CommentController.top);
+Router.get("/comments/active-movies", CommentController.activeMovies);
+Router.post("/comments", Guest, CommentController.create);
+Router.post("/comments/:id/vote", Guest, CommentController.vote);
 
 Router.post("/auth/login", AuthController.Login);
 Router.post("/auth/register", AuthController.Register);
