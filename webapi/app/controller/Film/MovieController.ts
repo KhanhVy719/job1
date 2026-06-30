@@ -20,13 +20,13 @@ const buildVidSrcEmbed = (
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
     (legacyBase
       ? `${legacyBase}/embed/movie/{tmdbId}`
-      : "https://cinesrc.st/embed/movie/{tmdbId}");
+      : "https://vidlux.xyz/embed/movie/{tmdbId}");
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
     (legacyBase && !legacyBase.includes("cinesrc.st")
       ? `${legacyBase}/embed/tv/{tmdbId}/{season}/{episode}`
-      : "https://cinesrc.st/embed/tv/{tmdbId}?s={season}&e={episode}");
+      : "https://vidlux.xyz/embed/tv/{tmdbId}/{season}/{episode}");
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;

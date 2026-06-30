@@ -40,13 +40,13 @@ const MOVIE_EMBED_TEMPLATE =
   process.env.EMBED_MOVIE_URL_TEMPLATE ||
   (VIDSRC_BASE
     ? `${VIDSRC_BASE}/embed/movie/{tmdbId}`
-    : "https://cinesrc.st/embed/movie/{tmdbId}");
+    : "https://vidlux.xyz/embed/movie/{tmdbId}");
 const TV_EMBED_TEMPLATE =
   process.env.VIDSRC_TV_URL_TEMPLATE ||
   process.env.EMBED_TV_URL_TEMPLATE ||
   (VIDSRC_BASE && !VIDSRC_BASE.includes("cinesrc.st")
     ? `${VIDSRC_BASE}/embed/tv/{tmdbId}/{season}/{episode}`
-    : "https://cinesrc.st/embed/tv/{tmdbId}?s={season}&e={episode}");
+    : "https://vidlux.xyz/embed/tv/{tmdbId}/{season}/{episode}");
 
 /**
  * Build iframe embed URL from TMDB id.
