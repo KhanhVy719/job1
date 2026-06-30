@@ -78,8 +78,7 @@ function svgDataUri(svg) {
 }
 
 const playerButtonIcons = {
-  rewind: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M20 14 10 24l10 10V14Z"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M36 14 26 24l10 10V14Z"/></svg>'),
-  forward: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="m28 14 10 10-10 10V14Z"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="m12 14 10 10-10 10V14Z"/></svg>'),
+  forward: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M31 11a15 15 0 1 1-12-1"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M31 11h-9V2"/><text x="24" y="30" fill="#fff" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" font-weight="700">10</text></svg>'),
 };
 
 function seekRelative(player, deltaSeconds) {
@@ -102,7 +101,6 @@ function addPlayerButton(player, icon, tooltip, id, onClick) {
 
 function enhanceJwPlayer(player) {
   const addButtons = () => {
-    addPlayerButton(player, playerButtonIcons.rewind, 'Lui 10s', 'seek-back-10', () => seekRelative(player, -10));
     addPlayerButton(player, playerButtonIcons.forward, 'Tien 10s', 'seek-forward-10', () => seekRelative(player, 10));
   };
 
