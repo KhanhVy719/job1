@@ -137,8 +137,13 @@ const runCrawlers = async () => {
   }
 };
 
-// Chỉ gọi các hàm crawler MỘT LẦN DUY NHẤT sau khi khởi tạo server
-runCrawlers();
+// Keep crawler startup opt-in in production. Recreating the API container should
+// not unexpectedly start heavy background crawling work.
+if (process.env.RUN_STARTUP_CRAWLERS === "true") {
+  runCrawlers();
+} else {
+  console.info("Startup crawlers disabled. Set RUN_STARTUP_CRAWLERS=true to enable.");
+}
 
 io.on("connection", (socket: Socket) => {
   console.log(`🔌 Client connected: ${socket.id}`);
