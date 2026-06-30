@@ -94,6 +94,12 @@ interface VideoQueueItem {
     displayServer: string;
     displayType: string;
     detectedQuality: string;
+    phase?: 'queued' | 'uploading' | 'processing' | 'done';
+    uploadProgress?: number;
+    uploadedBytes?: number;
+    totalBytes?: number;
+    speedBps?: number;
+    etaSeconds?: number;
 }
 
 // Interface cho dữ liệu trả về từ Stream Upload (JSON Parse Line)
@@ -150,6 +156,54 @@ const parseDurationToSeconds = (durationStr: string): number => {
     if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     if (parts.length === 2) return parts[0] * 60 + parts[1];
     return 0;
+};
+
+const CLIENT_UPLOAD_WEIGHT = 15;
+
+const clampPercent = (value: number): number => {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const mapServerProgress = (itemType: VideoQueueItem['type'], percent?: number): number => {
+    const serverPercent = clampPercent(percent || 0);
+    if (itemType !== 'file') return serverPercent;
+    return Math.min(100, CLIENT_UPLOAD_WEIGHT + Math.round((serverPercent / 100) * (100 - CLIENT_UPLOAD_WEIGHT)));
+};
+
+const formatBytes = (bytes?: number): string => {
+    if (!bytes || bytes <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, index);
+    return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+};
+
+const formatShortDuration = (seconds?: number): string => {
+    if (!seconds || seconds < 0 || !Number.isFinite(seconds)) return "";
+    const rounded = Math.ceil(seconds);
+    const mins = Math.floor(rounded / 60);
+    const secs = rounded % 60;
+    return mins > 0 ? `${mins}m ${secs.toString().padStart(2, "0")}s` : `${secs}s`;
+};
+
+const formatUploadProgressMessage = (
+    loaded: number,
+    total: number,
+    speedBps: number,
+    etaSeconds?: number
+): string => {
+    const speed = speedBps > 0 ? `${formatBytes(speedBps)}/s` : "";
+    const eta = etaSeconds && etaSeconds > 0 ? `ETA ${formatShortDuration(etaSeconds)}` : "";
+    const size = total > 0 ? `${formatBytes(loaded)}/${formatBytes(total)}` : formatBytes(loaded);
+    return ["Uploading file", size, speed, eta].filter(Boolean).join(" - ");
+};
+
+const getQueueProgressLabel = (item: VideoQueueItem): string => {
+    if (item.phase === 'uploading') {
+        return `${item.uploadProgress || 0}% - ${item.message}`;
+    }
+    return `${item.progress}% - ${item.message}`;
 };
 
 const extractSeasonNumber = (partStr: string): number => {
@@ -381,8 +435,235 @@ const Upload: React.FC = () => {
     };
 
     // --- UPLOAD LOGIC ---
+    const uploadQueueItemWithProgress = async (
+        item: VideoQueueItem,
+        bodyData: FormData
+    ): Promise<VideoQueueItem> => {
+        let buffer = "";
+        let finalResultUrl = "";
+        let finalJobId = "";
+        let finalErrorMessage = "";
+        let metadata = { duration: "", quality: "" };
+
+        const handleStreamData = (data: StreamData) => {
+            setVideoQueue(prev => prev.map(qItem => {
+                if (qItem.id !== item.id) return qItem;
+
+                if (data.type === 'info') {
+                    if (data.duration || data.quality) {
+                        metadata = {
+                            duration: secondsToHms(data.duration || 0),
+                            quality: data.quality || ''
+                        };
+                        setFormData(f => ({ ...f, duration: f.duration || metadata.duration }));
+                    }
+
+                    return {
+                        ...qItem,
+                        phase: 'processing',
+                        progress: Math.max(qItem.progress, item.type === 'file' ? CLIENT_UPLOAD_WEIGHT : 0),
+                        uploadProgress: item.type === 'file' ? 100 : qItem.uploadProgress,
+                        info: metadata.quality ? metadata : qItem.info,
+                        message: data.message || qItem.message || "Processing...",
+                        detectedQuality: data.quality || qItem.detectedQuality
+                    };
+                }
+
+                if (data.type === 'progress') {
+                    return {
+                        ...qItem,
+                        phase: 'processing',
+                        progress: mapServerProgress(item.type, data.percent),
+                        uploadProgress: item.type === 'file' ? 100 : qItem.uploadProgress,
+                        message: data.message || 'Processing...'
+                    };
+                }
+
+                if (data.type === 'result' && data.data) {
+                    finalResultUrl = data.data.playlist_url;
+                    finalJobId = data.data.job_id;
+                    return {
+                        ...qItem,
+                        phase: 'done',
+                        status: 'success',
+                        progress: 100,
+                        uploadProgress: 100,
+                        message: 'Done!',
+                        resultUrl: finalResultUrl,
+                        jobId: finalJobId
+                    };
+                }
+
+                if (data.type === 'error') {
+                    finalErrorMessage = data.message || "Unknown Error";
+                    return { ...qItem, status: 'error', message: finalErrorMessage };
+                }
+
+                return qItem;
+            }));
+
+            if (data.type === 'result' && data.data) {
+                finalResultUrl = data.data.playlist_url;
+                finalJobId = data.data.job_id;
+            }
+            if (data.type === 'error') finalErrorMessage = data.message || "Unknown Error";
+        };
+
+        const parseStreamBuffer = (flush = false) => {
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            if (flush && buffer.trim()) {
+                lines.push(buffer);
+                buffer = "";
+            }
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    handleStreamData(JSON.parse(line) as StreamData);
+                } catch (e) {
+                    console.error("JSON Parse Error", e);
+                }
+            }
+        };
+
+        await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            let uploadUrl = API_ENDPOINTS.upload;
+            try {
+                uploadUrl = axiosInstance.resolveURL(API_ENDPOINTS.upload);
+            } catch {}
+
+            const uploadStartedAt = Date.now();
+            let parsedLength = 0;
+
+            xhr.open("POST", uploadUrl, true);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader("Accept", "application/x-ndjson");
+
+            const token = localStorage.getItem("access_token");
+            if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+            if (item.type === 'url') xhr.setRequestHeader("Content-Type", "application/json");
+
+            xhr.upload.onprogress = (event) => {
+                if (item.type !== 'file') return;
+
+                const loaded = event.loaded || 0;
+                const total = event.lengthComputable ? event.total : (item.file?.size || 0);
+                const uploadProgress = total > 0 ? clampPercent((loaded / total) * 100) : 0;
+                const elapsedSec = Math.max((Date.now() - uploadStartedAt) / 1000, 0.1);
+                const speedBps = loaded / elapsedSec;
+                const etaSeconds = total > 0 && speedBps > 0 ? (total - loaded) / speedBps : undefined;
+
+                setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
+                    ...qItem,
+                    status: 'processing',
+                    phase: 'uploading',
+                    uploadProgress,
+                    uploadedBytes: loaded,
+                    totalBytes: total,
+                    speedBps,
+                    etaSeconds,
+                    progress: Math.min(CLIENT_UPLOAD_WEIGHT, Math.round((uploadProgress / 100) * CLIENT_UPLOAD_WEIGHT)),
+                    message: formatUploadProgressMessage(loaded, total, speedBps, etaSeconds)
+                } : qItem));
+            };
+
+            xhr.upload.onload = () => {
+                if (item.type !== 'file') return;
+                setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
+                    ...qItem,
+                    phase: 'processing',
+                    uploadProgress: 100,
+                    progress: Math.max(qItem.progress, CLIENT_UPLOAD_WEIGHT),
+                    message: 'Upload sent. Waiting for server...'
+                } : qItem));
+            };
+
+            xhr.onprogress = () => {
+                const responseText = xhr.responseText || "";
+                if (responseText.length <= parsedLength) return;
+                buffer += responseText.slice(parsedLength);
+                parsedLength = responseText.length;
+                parseStreamBuffer();
+            };
+
+            xhr.onload = () => {
+                const responseText = xhr.responseText || "";
+                if (responseText.length > parsedLength) {
+                    buffer += responseText.slice(parsedLength);
+                    parsedLength = responseText.length;
+                }
+                parseStreamBuffer(true);
+
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    if (finalErrorMessage) reject(new Error(finalErrorMessage));
+                    else resolve();
+                    return;
+                }
+
+                reject(new Error(`Upload Failed (${xhr.status})`));
+            };
+
+            xhr.onerror = () => reject(new Error("Network error during upload"));
+            xhr.onabort = () => reject(new Error("Upload aborted"));
+
+            xhr.send(item.type === 'file' ? bodyData : JSON.stringify({ url: item.url, seg: 4 }));
+        });
+
+        if (finalErrorMessage || !finalResultUrl) {
+            const msg = finalErrorMessage || "Upload finished without playlist URL";
+            setVideoQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', message: msg } : i));
+            return { ...item, status: 'error', message: msg };
+        }
+
+        const finalQuality = metadata.quality || item.detectedQuality || '720p';
+        return {
+            ...item,
+            status: 'success',
+            progress: 100,
+            phase: 'done',
+            uploadProgress: item.type === 'file' ? 100 : item.uploadProgress,
+            resultUrl: finalResultUrl,
+            jobId: finalJobId,
+            info: metadata.quality ? metadata : item.info,
+            detectedQuality: finalQuality
+        };
+    };
+
     const processQueueItem = async (item: VideoQueueItem): Promise<VideoQueueItem> => {
-        setVideoQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing', progress: 0, message: 'Connecting...' } : i));
+        setVideoQueue(prev => prev.map(i => i.id === item.id ? {
+            ...i,
+            status: 'processing',
+            progress: 0,
+            phase: item.type === 'file' ? 'uploading' : 'processing',
+            uploadProgress: 0,
+            message: item.type === 'file' ? 'Preparing upload...' : 'Connecting...'
+        } : i));
+
+        const bodyData = new FormData();
+        if (item.type === 'file' && item.file) bodyData.append('video', item.file);
+        else if (item.url) bodyData.append('url', item.url);
+        bodyData.append('seg', '4');
+
+        try {
+            return await uploadQueueItemWithProgress(item, bodyData);
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Upload Failed";
+            setVideoQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', message: msg } : i));
+            return { ...item, status: 'error', message: msg };
+        }
+    };
+
+    const processQueueItemLegacy = async (item: VideoQueueItem): Promise<VideoQueueItem> => {
+        setVideoQueue(prev => prev.map(i => i.id === item.id ? {
+            ...i,
+            status: 'processing',
+            progress: 0,
+            phase: item.type === 'file' ? 'uploading' : 'processing',
+            uploadProgress: 0,
+            message: item.type === 'file' ? 'Preparing upload...' : 'Connecting...'
+        } : i));
 
         const bodyData = new FormData();
         if (item.type === 'file' && item.file) bodyData.append('video', item.file);
@@ -472,6 +753,7 @@ const Upload: React.FC = () => {
             return { ...item, status: 'error', message: msg };
         }
     };
+    void processQueueItemLegacy;
 
     // --- MAIN SUBMIT ---
     const handleMainSubmit = async () => {
@@ -853,7 +1135,7 @@ const Upload: React.FC = () => {
                                                         <div className='flex items-center space-x-2'>
                                                             <span className='text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium whitespace-nowrap'>{item.storageName}</span>
                                                             <div className="flex items-center space-x-1 flex-1 overflow-hidden">
-                                                                {item.status === 'processing' && <span className="text-[10px] text-blue-600 truncate"><i className="fa-solid fa-sync fa-spin mr-1"></i>{item.progress}% - {item.message}</span>}
+                                                                {item.status === 'processing' && <span className="text-[10px] text-blue-600 truncate"><i className="fa-solid fa-sync fa-spin mr-1"></i>{getQueueProgressLabel(item)}</span>}
                                                                 {item.status === 'error' && <span className="text-[10px] text-red-600 truncate">{item.message}</span>}
                                                                 {item.status === 'pending' && <span className="text-[10px] text-gray-400">Chờ tải lên</span>}
                                                                 {item.status === 'success' && item.info && <span className="text-[10px] text-green-600 font-medium">{item.info.quality} • {item.info.duration}</span>}

@@ -46,6 +46,7 @@ class UploadController {
   ) {
     if (!res.writableEnded) {
       res.write(JSON.stringify({ type, ...data }) + "\n");
+      (res as any).flush?.();
     }
   }
 
@@ -99,8 +100,10 @@ class UploadController {
 
     // 1. SETUP HEADERS CHO STREAMING (QUAN TRỌNG)
     res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    (res as any).flushHeaders?.();
 
     try {
       this.sendStreamData(res, "info", { message: "Initializing..." });

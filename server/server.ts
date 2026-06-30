@@ -92,7 +92,7 @@ app.use(
   compression({
     filter: (req, res) => {
       const type = String(res.getHeader("Content-Type") || "");
-      if (/video\/mp2t|octet-stream|mpegurl/i.test(type)) return false; // không nén stream
+      if (/video\/mp2t|octet-stream|mpegurl|application\/x-ndjson|text\/event-stream/i.test(type)) return false; // không nén stream
       return compression.filter(req, res);
     },
   })
