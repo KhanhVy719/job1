@@ -88,9 +88,26 @@ axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => response, // Trả về data trực tiếp hoặc response tùy convention
   (error: AxiosError) => {
     // Xử lý lỗi tập trung
-    const customError = (error.response?.data as any) || {
-      message: error.message || "Something went wrong",
-    };
+    const responseData = error.response?.data;
+    const customError =
+      responseData && typeof responseData === "object"
+        ? {
+            ...(responseData as Record<string, unknown>),
+            httpStatus: error.response?.status,
+            code: error.code,
+            message:
+              (responseData as { message?: string }).message ||
+              error.message ||
+              "Something went wrong",
+          }
+        : {
+            message:
+              typeof responseData === "string" && responseData
+                ? responseData
+                : error.message || "Something went wrong",
+            httpStatus: error.response?.status,
+            code: error.code,
+          };
     return Promise.reject(customError);
   }
 );
