@@ -69,6 +69,7 @@ class UserController {
         password: hashedPassword,
         // Tạo avatar mặc định đẹp hơn với ui-avatars
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullname)}&background=random&color=fff&size=128`,
+        vip: 0,
       });
 
       // Trả về kết quả thành công

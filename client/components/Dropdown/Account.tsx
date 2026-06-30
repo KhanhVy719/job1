@@ -58,12 +58,16 @@ const AccountDropdown: React.FC<AccountProps> = ({
               <div className="flex items-center space-x-2">
                 {vip && <span className="border border-primary text-primary text-[10px] font-bold px-1 rounded">ROX</span>}
                 <span className="text-white text-xs">{user.fullname}</span>
-                <i className="fa-solid fa-infinity text-primary text-xs"></i>
+                {vip ? (
+                  <i className="fa-solid fa-infinity text-primary text-xs"></i>
+                ) : (
+                  <span className="border border-white/15 text-gray-300 text-[10px] font-bold px-1 rounded">Thường</span>
+                )}
               </div>
             </div>
 
             <p className="text-gray-300 text-xs mb-2">
-              Tài khoản RoX tới: 2/2/222
+              {vip ? "Tài khoản RoX đang hoạt động" : "Tài khoản thường"}
             </p>
             {vip ? (
               <button className="w-full bg-primary text-[#1c2340]  text-xs font-medium py-2 rounded flex items-center justify-center space-x-1 transition-colors">
@@ -72,7 +76,7 @@ const AccountDropdown: React.FC<AccountProps> = ({
               </button>
             ) : (
               <button className="w-full bg-primary text-[#1c2340] font-bold text-xs py-2 rounded-lg flex items-center justify-center space-x-1 transition-colors">
-                <span>Gia hạn</span>
+                <span>Nâng cấp</span>
                 <i className="fa-solid fa-chevron-up text-[10px]"></i>
               </button>
             )}

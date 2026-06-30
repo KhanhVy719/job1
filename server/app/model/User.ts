@@ -36,7 +36,7 @@ const UserSchema: Schema = new Schema(
     avatar: { type: String, default: "" },
     coin: { type: Number, default: 1000 },
     level: { type: Number, default: 1 },
-    vip: { type: Number, default: 1 },
+    vip: { type: Number, default: 0 },
     favorites: [{ type: Schema.Types.ObjectId, ref: "Movie" }],
     history: [
       {

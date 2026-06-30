@@ -52,6 +52,7 @@ class AuthController {
           fullname
         )}&background=random&color=fff&size=128`,
         verify: true,
+        vip: 0,
       });
 
       const token = jwt.sign(
