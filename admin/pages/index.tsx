@@ -12,16 +12,18 @@ import {
   LineChart,
   Line,
   ComposedChart,
-  Legend,
 } from "recharts";
 import {
   HardDrive,
   Cpu,
   MemoryStick,
-  CircuitBoard,
   Activity,
   Server,
-  Eye,
+  Database,
+  Router,
+  CheckCircle2,
+  XCircle,
+  Clock3,
   Globe,
   Search,
   Zap,
@@ -77,6 +79,20 @@ interface SystemStats {
       listeningPorts?: number[];
     };
   };
+  nodes?: MonitorNode[];
+}
+
+interface MonitorNode {
+  id: string;
+  label: string;
+  role?: string;
+  type: "local" | "ssh";
+  host?: string;
+  status: "online" | "offline";
+  lastSeen?: string;
+  latencyMs?: number;
+  error?: string;
+  stats?: SystemStats;
 }
 
 interface ListData {
@@ -128,6 +144,20 @@ const formatBytes = (bytes: number, decimals = 2) => {
 const parseSizeString = (str?: string): number =>
   str ? parseFloat(str.replace(/[^\d.]/g, "")) || 0 : 0;
 
+const clampPercent = (value?: number): number =>
+  Math.max(0, Math.min(100, Number(value || 0)));
+
+const sumTraffic = (
+  traffic?: { rx_sec?: number; tx_sec?: number }[]
+): { rx: number; tx: number } =>
+  (traffic || []).reduce(
+    (acc, item) => ({
+      rx: acc.rx + Number(item.rx_sec || 0),
+      tx: acc.tx + Number(item.tx_sec || 0),
+    }),
+    { rx: 0, tx: 0 }
+  );
+
 const formatDateShort = (dateStr: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -169,6 +199,10 @@ const HomePage: React.FC = () => {
   const [gaData, setGaData] = useState<DetailedTrafficData | null>(null);
   const [gscData, setGscData] = useState<GSCData | null>(null);
   const [networkHistory, setNetworkHistory] = useState<NetworkPoint[]>([]);
+  const [nodeNetworkHistory, setNodeNetworkHistory] = useState<
+    Record<string, NetworkPoint[]>
+  >({});
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
 
   // Toggle chart chính
   const [showClicks, setShowClicks] = useState(true);
@@ -180,9 +214,33 @@ const HomePage: React.FC = () => {
     const handleData = (data: any) => {
       if (data.cpu || data.network) {
         setStats((prev) => ({ ...prev, ...data }));
+        if (Array.isArray(data.nodes) && data.nodes.length) {
+          setActiveNodeId((prev) =>
+            prev && data.nodes.some((node: MonitorNode) => node.id === prev)
+              ? prev
+              : data.nodes[0].id
+          );
+
+          const time = new Date().toLocaleTimeString("vi-VN", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+
+          setNodeNetworkHistory((prev) => {
+            const next = { ...prev };
+            data.nodes.forEach((node: MonitorNode) => {
+              if (node.status !== "online" || !node.stats?.network?.traffic) return;
+              const { rx, tx } = sumTraffic(node.stats.network.traffic);
+              next[node.id] = [...(next[node.id] || []), { time, rx, tx }].slice(-30);
+            });
+            return next;
+          });
+        }
+
         if (data.network?.traffic) {
-          const rx = data.network.traffic[0]?.rx_sec || 0;
-          const tx = data.network.traffic[0]?.tx_sec || 0;
+          const { rx, tx } = sumTraffic(data.network.traffic);
           const time = new Date().toLocaleTimeString("vi-VN", {
             hour12: false,
             hour: "2-digit",
@@ -211,13 +269,25 @@ const HomePage: React.FC = () => {
 
   if (!stats && !gaData) return <div className="min-h-screen bg-[#F8F9FA]" />;
 
+  const nodes = stats?.nodes || [];
+  const selectedNode =
+    nodes.find((node) => node.id === activeNodeId) || nodes[0] || null;
+  const displayStats = selectedNode?.stats || stats;
+  const activeNetworkHistory = selectedNode
+    ? nodeNetworkHistory[selectedNode.id] || []
+    : networkHistory;
+  const activeTraffic = sumTraffic(displayStats?.network?.traffic);
+
   const totalDisk =
-    stats?.disk?.reduce((acc, d) => acc + parseSizeString(d.size), 0) || 0;
+    displayStats?.disk?.reduce((acc, d) => acc + parseSizeString(d.size), 0) || 0;
   const usedDisk =
-    stats?.disk?.reduce((acc, d) => acc + parseSizeString(d.used), 0) || 0;
+    displayStats?.disk?.reduce((acc, d) => acc + parseSizeString(d.used), 0) || 0;
   const diskPercent = totalDisk > 0 ? (usedDisk / totalDisk) * 100 : 0;
-  const currentRx = stats?.network?.traffic?.[0]?.rx_sec || 0;
-  const currentTx = stats?.network?.traffic?.[0]?.tx_sec || 0;
+  const currentRx = activeTraffic.rx;
+  const currentTx = activeTraffic.tx;
+  const onlineNodes = nodes.filter((node) => node.status === "online").length;
+  const selectedNodeName =
+    selectedNode?.label || displayStats?.os?.hostname || "Server";
 
   // --- MÀU SẮC ĐÃ CHỈNH (Vàng/Xám/Xanh/Cam) ---
   const colors = {
@@ -229,6 +299,158 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="px-3 lg:px-5 xl:px-8 py-5 space-y-6">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900">Bang dieu khien</h1>
+          <p className="text-sm text-zinc-500">
+            Dang xem tai nguyen cua{" "}
+            <span className="font-semibold text-zinc-800">{selectedNodeName}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-zinc-600">
+          <Server size={16} className="text-zinc-400" />
+          <span className="font-semibold text-zinc-900">{onlineNodes}</span>
+          <span>/ {nodes.length || 1} VPS online</span>
+        </div>
+      </div>
+
+      {nodes.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {nodes.map((node) => {
+            const nodeStats = node.stats;
+            const nodeTraffic = sumTraffic(nodeStats?.network?.traffic);
+            const nodeTotalDisk =
+              nodeStats?.disk?.reduce((acc, d) => acc + parseSizeString(d.size), 0) || 0;
+            const nodeUsedDisk =
+              nodeStats?.disk?.reduce((acc, d) => acc + parseSizeString(d.used), 0) || 0;
+            const nodeDiskPercent =
+              nodeTotalDisk > 0 ? (nodeUsedDisk / nodeTotalDisk) * 100 : 0;
+            const isActive = selectedNode?.id === node.id;
+            const isOnline = node.status === "online";
+            const roleIcon =
+              node.role?.toLowerCase().includes("db") ||
+              node.role?.toLowerCase().includes("redis") ? (
+                <Database size={18} />
+              ) : (
+                <Router size={18} />
+              );
+
+            return (
+              <button
+                key={node.id}
+                type="button"
+                onClick={() => setActiveNodeId(node.id)}
+                className={clsx(
+                  "w-full rounded-xl border bg-white p-4 text-left transition-all",
+                  isActive
+                    ? "border-zinc-900 shadow-sm ring-1 ring-zinc-900"
+                    : "border-gray-200 hover:border-zinc-300"
+                )}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div
+                      className={clsx(
+                        "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                        isOnline ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                      )}
+                    >
+                      {roleIcon}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="truncate text-base font-bold text-zinc-900">
+                          {node.label}
+                        </h2>
+                        <span
+                          className={clsx(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase",
+                            isOnline
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-red-50 text-red-700"
+                          )}
+                        >
+                          {isOnline ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                          {node.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-zinc-500">
+                        {node.role || "server"} {node.host ? `- ${node.host}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1 text-xs text-zinc-500">
+                    <Clock3 size={13} />
+                    {node.latencyMs ?? 0}ms
+                  </div>
+                </div>
+
+                {isOnline && nodeStats ? (
+                  <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase text-zinc-400">CPU</p>
+                      <p className="mt-1 text-lg font-bold text-zinc-900">
+                        {nodeStats.cpu?.load ?? 0}%
+                      </p>
+                      <div className="mt-1 h-1.5 rounded-full bg-zinc-100">
+                        <div
+                          className="h-full rounded-full bg-zinc-900"
+                          style={{ width: `${clampPercent(nodeStats.cpu?.load)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase text-zinc-400">RAM</p>
+                      <p className="mt-1 text-lg font-bold text-zinc-900">
+                        {nodeStats.memory?.percent ?? 0}%
+                      </p>
+                      <div className="mt-1 h-1.5 rounded-full bg-zinc-100">
+                        <div
+                          className="h-full rounded-full bg-yellow-500"
+                          style={{ width: `${clampPercent(nodeStats.memory?.percent)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase text-zinc-400">Disk</p>
+                      <p className="mt-1 text-lg font-bold text-zinc-900">
+                        {nodeDiskPercent.toFixed(1)}%
+                      </p>
+                      <div className="mt-1 h-1.5 rounded-full bg-zinc-100">
+                        <div
+                          className={clsx(
+                            "h-full rounded-full",
+                            nodeDiskPercent > 85 ? "bg-red-500" : "bg-emerald-500"
+                          )}
+                          style={{ width: `${clampPercent(nodeDiskPercent)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase text-zinc-400">Network</p>
+                      <div className="mt-1 space-y-0.5 text-xs font-medium text-zinc-700">
+                        <div className="flex items-center gap-1">
+                          <ArrowDown size={12} className="text-yellow-600" />
+                          {formatBytes(nodeTraffic.rx)}/s
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <ArrowUp size={12} className="text-zinc-500" />
+                          {formatBytes(nodeTraffic.tx)}/s
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {node.error || "Khong lay duoc du lieu VPS nay."}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Disk */}
         <div className="bg-white p-5 rounded-xl border border-gray-200">
@@ -261,16 +483,16 @@ const HomePage: React.FC = () => {
             <MemoryStick size={20} className="text-zinc-300" />
           </div>
           <h3 className="text-2xl font-bold text-zinc-800">
-            {stats?.memory?.used}
+            {displayStats?.memory?.used}
           </h3>
           <div className="w-full bg-zinc-100 h-1.5 rounded-full mt-2">
             <div
               className="h-full bg-yellow-500 rounded-full"
-              style={{ width: `${stats?.memory?.percent}%` }}
+              style={{ width: `${clampPercent(displayStats?.memory?.percent)}%` }}
             ></div>
           </div>
           <p className="text-xs text-zinc-500 mt-2 text-right">
-            {stats?.memory?.percent}%
+            {displayStats?.memory?.percent}%
           </p>
         </div>
 
@@ -283,16 +505,16 @@ const HomePage: React.FC = () => {
             <Cpu size={20} className="text-zinc-300" />
           </div>
           <h3 className="text-2xl font-bold text-zinc-800">
-            {stats?.cpu?.load}%
+            {displayStats?.cpu?.load}%
           </h3>
           <div className="w-full bg-zinc-100 h-1.5 rounded-full mt-2">
             <div
               className="h-full bg-zinc-900 rounded-full"
-              style={{ width: `${stats?.cpu?.load}%` }}
+              style={{ width: `${clampPercent(displayStats?.cpu?.load)}%` }}
             ></div>
           </div>
           <p className="text-xs text-zinc-500 mt-2 text-right">
-            {stats?.cpu?.cores} Cores
+            {displayStats?.cpu?.cores} Cores
           </p>
         </div>
 
@@ -660,7 +882,7 @@ const HomePage: React.FC = () => {
             </div>
             <div className="flex-1">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={networkHistory}>
+                <LineChart data={activeNetworkHistory}>
                   <Tooltip
                     contentStyle={{
                       borderRadius: "8px",
