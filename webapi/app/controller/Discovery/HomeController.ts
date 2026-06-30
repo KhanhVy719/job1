@@ -116,6 +116,7 @@ class HomeController {
       }
       case "upcoming": {
         baseQuery.$and = [
+          ...(baseQuery.$and || []),
           { trailer_url: { $ne: "" } },
           {
             $or: [

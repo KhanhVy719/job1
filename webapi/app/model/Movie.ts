@@ -60,6 +60,7 @@ export interface IMovie extends Document {
     vote_count: number;
   };
   zxc?: IZxcVerification;
+  has_local_video: boolean;
   is_copyright: boolean;
   sub_docquyen: boolean;
   chieurap: boolean;
@@ -118,6 +119,7 @@ const movieSchema = new Schema<IMovie>(
       vote_count: { type: Number },
     },
     zxc: { type: ZxcVerificationSchema, default: () => ({ status: "unknown" }) },
+    has_local_video: { type: Boolean, default: false, index: true },
     is_copyright: { type: Boolean, default: false },
     sub_docquyen: { type: Boolean, default: false },
     chieurap: { type: Boolean, default: false },
@@ -139,6 +141,7 @@ movieSchema.index({ type: 1, view: -1 });
 movieSchema.index({ createdAt: -1 });
 movieSchema.index({ "zxc.status": 1, updatedAt: -1 });
 movieSchema.index({ "zxc.status": 1, view: -1 });
+movieSchema.index({ has_local_video: 1, updatedAt: -1 });
 
 const Movie: Model<IMovie> = mongoose.models.Movie || mongoose.model<IMovie>("Movie", movieSchema);
 

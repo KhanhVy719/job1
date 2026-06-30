@@ -7,6 +7,7 @@
     "count:zxc": "npx tsx scripts/count-zxc.ts",
     "export:zxc": "npx tsx scripts/export-zxc-candidates.ts",
     "import:zxc": "npx tsx scripts/import-zxc-results.ts",
+    "repair:local-upload": "npx tsx scripts/repair-local-upload-visibility.ts",
     "start": "npx tsx watch server.ts",
     "verify:zxc": "npx tsx scripts/verify-zxc.ts",
     "verify:zxc:file": "npx tsx scripts/verify-zxc-file.ts",

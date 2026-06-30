@@ -58,6 +58,7 @@ export interface IMovie extends Document {
     vote_average: number;
     vote_count: number;
   };
+  has_local_video: boolean;
   is_copyright: boolean;
   sub_docquyen: boolean;
   chieurap: boolean;
@@ -115,6 +116,7 @@ const movieSchema = new Schema<IMovie>(
       vote_average: { type: Number },
       vote_count: { type: Number },
     },
+    has_local_video: { type: Boolean, default: false, index: true },
     is_copyright: { type: Boolean, default: false },
     sub_docquyen: { type: Boolean, default: false },
     chieurap: { type: Boolean, default: false },

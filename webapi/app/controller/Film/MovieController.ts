@@ -6,7 +6,7 @@ import Season from "../../model/Season";
 import {
   isZxcVerifiedRequired,
   publicMovieConstraint,
-  ZXC_AVAILABLE_CONSTRAINT,
+  publicPlayableMovieConstraint,
 } from "../Shared/shared";
 interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
@@ -115,7 +115,7 @@ class MovieController {
     try {
       const movie = await Movie.findOne({
         slug,
-        ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+        ...publicMovieConstraint(),
       })
         .populate("category", "name slug")
         .populate("country", "name slug code")
@@ -147,7 +147,7 @@ class MovieController {
     try {
       const movie = await Movie.findOne({
         slug: movieSlug,
-        ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+        ...publicPlayableMovieConstraint(),
       })
         .select("_id type tmdb zxc")
         .lean();
@@ -166,8 +166,13 @@ class MovieController {
           .json({ status: false, message: "Tập phim không tồn tại" });
 
       if (isZxcVerifiedRequired()) {
-        const sourceStatus = episode.zxc?.status || movie.zxc?.status;
-        if (sourceStatus !== "available") {
+        const hasLocalVideos =
+          Array.isArray(episode.videos) &&
+          episode.videos.some((video: IVideoResource) => Boolean(video?.url));
+        const hasVerifiedZxc =
+          episode.zxc?.status === "available" ||
+          movie.zxc?.status === "available";
+        if (!hasVerifiedZxc && !hasLocalVideos) {
           return res.status(404).json({
             status: false,
             message: "Nguồn ZXC của tập này chưa được xác minh",
@@ -222,7 +227,7 @@ class MovieController {
 
       const currentMovie = await Movie.findOne({
         slug,
-        ...(isZxcVerifiedRequired() ? ZXC_AVAILABLE_CONSTRAINT : {}),
+        ...publicMovieConstraint(),
       })
         .select({
           _id: 1,

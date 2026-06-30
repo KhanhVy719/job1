@@ -17,6 +17,14 @@ interface InputVideo {
   is_default?: boolean;
 }
 
+interface InputSubtitle {
+  language?: string;
+  lang?: string;
+  label?: string;
+  url?: string;
+  value?: string;
+}
+
 interface InputEpisode {
   id: string; // ID từ nguồn crawl/upload
   name: string;
@@ -27,6 +35,9 @@ interface InputEpisode {
   quality?: string;
   duration?: string; // "00:24"
   season: number;
+  subtitles?: InputSubtitle[];
+  episode?: number;
+  episode_number?: number;
 }
 
 interface IFrontendEpisode {
@@ -55,9 +66,30 @@ class MovieController {
       return parts[0] * 3600 + parts[1] * 60 + parts[2];
     } else if (parts.length === 2) {
       // MM:SS hoặc HH:MM
-      return parts[0] * 3600 + parts[1] * 60;
+      return parts[0] * 60 + parts[1];
     }
     return 0;
+  }
+
+  private getEpisodeNumber(item: InputEpisode, fallback: number): number {
+    const explicit = Number(item.episode ?? item.episode_number);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+    const match = item.name?.match(/\d+/);
+    const fromName = match ? Number(match[0]) : NaN;
+    return Number.isFinite(fromName) && fromName > 0 ? fromName : fallback;
+  }
+
+  private normalizeSubtitles(input?: InputSubtitle[]) {
+    if (!Array.isArray(input)) return [];
+
+    return input
+      .map((sub) => ({
+        language: sub.language || sub.lang || "vi",
+        label: sub.label || sub.language || sub.lang || "Subtitle",
+        url: sub.url || sub.value || "",
+      }))
+      .filter((sub) => Boolean(sub.url));
   }
 
   // --- CONTROLLER METHODS (Dùng Arrow Function để sửa lỗi 'this' undefined) ---
@@ -83,6 +115,15 @@ class MovieController {
       const rawEpisodes = await Episode.find({ movie_id: movie._id })
         .sort({ sort_order: 1, episode: 1 })
         .lean();
+      const seasonIds = Array.from(
+        new Set(rawEpisodes.map((ep) => ep.season_id?.toString()).filter(Boolean))
+      );
+      const seasons = await Season.find({ _id: { $in: seasonIds } })
+        .select("season_number")
+        .lean();
+      const seasonNumberById = new Map(
+        seasons.map((season) => [season._id.toString(), season.season_number])
+      );
 
       const processedEpisodes: IFrontendEpisode[] = [];
 
@@ -95,6 +136,8 @@ class MovieController {
           const feEpisode: IFrontendEpisode = {
             ...ep,
             type: type as string,
+            season_number:
+              seasonNumberById.get(ep.season_id?.toString() || "") || 1,
           };
           processedEpisodes.push(feEpisode);
         });
@@ -250,7 +293,14 @@ class MovieController {
         subtitles,
       } = req.body;
 
-      console.log(req.body);
+      const inputEpisodes: InputEpisode[] = Array.isArray(episodes) ? episodes : [];
+      if (inputEpisodes.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No episodes provided.",
+        });
+      }
+
       const movie = await Movie.findOne({ "tmdb.id": movie_id });
 
       if (!movie) {
@@ -260,10 +310,11 @@ class MovieController {
         });
       }
 
+      const fallbackSubtitles = this.normalizeSubtitles(subtitles);
       const episodesBySeason = new Map<number, InputEpisode[]>();
 
-      episodes.forEach((ep: any) => {
-        const seasonNum = ep.season || 1;
+      inputEpisodes.forEach((ep) => {
+        const seasonNum = Number(ep.season) || 1;
         if (!episodesBySeason.has(seasonNum)) {
           episodesBySeason.set(seasonNum, []);
         }
@@ -283,16 +334,18 @@ class MovieController {
             movie_id: movie._id,
             season_number: seasonNum,
             name: `Phần ${seasonNum}`,
+            slug: `phan-${seasonNum}`,
             episode_count: 0,
             episodes: [],
           });
         }
-
-        const episodeIds: mongoose.Types.ObjectId[] = [];
+        if (!season.slug) {
+          season.slug = `phan-${seasonNum}`;
+        }
 
         for (let i = 0; i < epList.length; i++) {
           const item = epList[i];
-          const episodeNumber = i + 1;
+          const episodeNumber = this.getEpisodeNumber(item, i + 1);
 
           const apiBase = `${req.protocol}://${req.get("host")}`;
           const toPlayableUrl = (url: string) => {
@@ -303,7 +356,7 @@ class MovieController {
             return url;
           };
 
-          const videos: IVideoResource[] = item.videos.map((v) => ({
+          const videos: IVideoResource[] = (item.videos || []).map((v) => ({
             server_name: v.server_name || "Vip Server",
             quality: v.quality || "HD",
             // TikTok HLS: playlist local trỏ segment TikTok PNG/iTXt, JWPlayer đi qua hls-proxy để decode TS.
@@ -314,22 +367,42 @@ class MovieController {
             skip_outro: v.skip_outro || { start: 0, end: 0 },
             is_default: v.is_default || false,
           }));
+          if (videos.length > 0 && !videos.some((video) => video.is_default)) {
+            videos[0].is_default = true;
+          }
+          const types = Array.from(
+            new Set(
+              [...videos.map((video) => video.type), item.type || ""].filter(
+                Boolean
+              )
+            )
+          );
+          const itemSubtitles = this.normalizeSubtitles(item.subtitles);
+          const normalizedSubtitles = itemSubtitles.length
+            ? itemSubtitles
+            : fallbackSubtitles;
 
           // Bây giờ `this.toSlug` và `this.parseDuration` sẽ hoạt động chính xác
-          const updatedEpisode = await Episode.findOneAndUpdate(
+          await Episode.findOneAndUpdate(
             {
               movie_id: movie._id,
+              season_id: season._id,
               episode: episodeNumber,
             },
             {
               $set: {
+                movie_id: movie._id,
+                season_id: season._id,
                 name: item.name,
                 slug: this.toSlug(item.name),
+                episode: episodeNumber,
+                sort_order: episodeNumber,
+                types: types.length ? types : ["phude"],
                 thumbnail: movie.thumb_url,
                 duration: this.parseDuration(item.duration),
                 videos: videos,
                 audios: [],
-                subtitles: [],
+                subtitles: normalizedSubtitles,
                 updatedAt: new Date(),
               },
             },
@@ -340,13 +413,15 @@ class MovieController {
             }
           );
 
-          if (updatedEpisode) {
-            episodeIds.push(updatedEpisode._id);
-          }
         }
 
-        season.episodes = episodeIds;
-        season.episode_count = episodeIds.length;
+        const allSeasonEpisodes = await Episode.find({ season_id: season._id })
+          .select("_id")
+          .sort({ episode: 1, sort_order: 1 })
+          .lean();
+
+        season.episodes = allSeasonEpisodes.map((episode) => episode._id) as any;
+        season.episode_count = allSeasonEpisodes.length;
         await season.save();
 
         updatedSeasonIds.push(season._id);
@@ -361,10 +436,15 @@ class MovieController {
       const totalEpisodes = await Episode.countDocuments({
         movie_id: movie._id,
       });
+      const hasLocalVideo = await Episode.exists({
+        movie_id: movie._id,
+        "videos.0": { $exists: true },
+      });
 
       movie.seasons = finalSeasonIds as any;
       movie.episode_total = totalEpisodes.toString();
       movie.episode_current = totalEpisodes.toString();
+      movie.has_local_video = Boolean(hasLocalVideo);
 
       await movie.save();
 
