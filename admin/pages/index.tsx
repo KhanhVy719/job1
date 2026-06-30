@@ -174,25 +174,29 @@ const TinyChart = ({
   dataKey: string;
   color: string;
   reversed?: boolean;
-}) => (
-  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-    <LineChart data={data}>
-      {reversed ? (
-        <YAxis hide domain={["dataMin", "dataMax"]} reversed={true} />
-      ) : (
-        <YAxis hide domain={["dataMin", "dataMax"]} />
-      )}
-      <Line
-        type="monotone"
-        dataKey={dataKey}
-        stroke={color}
-        strokeWidth={2}
-        dot={false}
-        isAnimationActive={false}
-      />
-    </LineChart>
-  </ResponsiveContainer>
-);
+}) => {
+  if (!data || data.length < 2) return null;
+
+  return (
+    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+      <LineChart data={data}>
+        {reversed ? (
+          <YAxis hide domain={["dataMin", "dataMax"]} reversed={true} />
+        ) : (
+          <YAxis hide domain={["dataMin", "dataMax"]} />
+        )}
+        <Line
+          type="monotone"
+          dataKey={dataKey}
+          stroke={color}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+};
 
 const HomePage: React.FC = () => {
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -835,33 +839,35 @@ const HomePage: React.FC = () => {
               <Zap size={16} className="text-zinc-400" /> Xu hướng Realtime
             </h3>
             <div className="flex-1 min-h-0 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                <AreaChart data={gaData?.trafficTrend || []}>
-                  <defs>
-                    <linearGradient
-                      id="colorRealtime"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="5%" stopColor="#18181b" stopOpacity={0.1} />
-                      <stop offset="95%" stopColor="#18181b" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Tooltip
-                    contentStyle={{ borderRadius: "8px", border: "none" }}
-                    itemStyle={{ color: "#000" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="activeUsers"
-                    stroke="#18181b"
-                    strokeWidth={2}
-                    fill="url(#colorRealtime)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {(gaData?.trafficTrend?.length || 0) >= 2 && (
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                  <AreaChart data={gaData?.trafficTrend || []}>
+                    <defs>
+                      <linearGradient
+                        id="colorRealtime"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop offset="5%" stopColor="#18181b" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#18181b" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Tooltip
+                      contentStyle={{ borderRadius: "8px", border: "none" }}
+                      itemStyle={{ color: "#000" }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="activeUsers"
+                      stroke="#18181b"
+                      strokeWidth={2}
+                      fill="url(#colorRealtime)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -881,8 +887,9 @@ const HomePage: React.FC = () => {
               </div>
             </div>
             <div className="flex-1 min-h-0 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                <LineChart data={activeNetworkHistory}>
+              {activeNetworkHistory.length >= 2 && (
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                  <LineChart data={activeNetworkHistory}>
                   <Tooltip
                     contentStyle={{
                       borderRadius: "8px",
@@ -910,8 +917,9 @@ const HomePage: React.FC = () => {
                     isAnimationActive={false}
                     name="Tải lên"
                   />
-                </LineChart>
-              </ResponsiveContainer>
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>
