@@ -9,6 +9,7 @@ module.exports = {
   sitemapSize: 5000,
   changefreq: "daily",
   priority: 0.8,
+  exclude: ["/yeu-thich", "/danh-sach", "/lich-su", "/tai-khoan"],
 
   robotsTxtOptions: {
     additionalSitemaps: [],
