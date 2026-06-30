@@ -126,6 +126,51 @@ const LANGUAGE_MAPPING: Record<string, { id: string; label: string; backendType:
 
 const BottomItems = [{ id: "comment", label: "Bình luận" }, { id: "rate", label: "Đánh giá" }];
 
+interface EmbedServerOption {
+  id: string;
+  label: string;
+  url: string;
+}
+
+const EMBED_PROVIDERS = [
+  {
+    id: "vidlux",
+    label: "VidLux",
+    movie: (tmdbId: string) => `https://vidlux.xyz/embed/movie/${tmdbId}`,
+    tv: (tmdbId: string, season: number, episode: number) =>
+      `https://vidlux.xyz/embed/tv/${tmdbId}/${season}/${episode}`,
+  },
+  {
+    id: "cinesrc",
+    label: "CineSrc",
+    movie: (tmdbId: string) => `https://cinesrc.st/embed/movie/${tmdbId}`,
+    tv: (tmdbId: string, season: number, episode: number) =>
+      `https://cinesrc.st/embed/tv/${tmdbId}?s=${season}&e=${episode}`,
+  },
+  {
+    id: "zxc",
+    label: "ZXC",
+    movie: (tmdbId: string) => `https://zxcstream.xyz/player/movie/${tmdbId}`,
+    tv: (tmdbId: string, season: number, episode: number) =>
+      `https://zxcstream.xyz/player/tv/${tmdbId}/${season}/${episode}/en`,
+  },
+  {
+    id: "vidsrc",
+    label: "VidSrc",
+    movie: (tmdbId: string) => `https://vidsrc.sbs/embed/movie/${tmdbId}`,
+    tv: (tmdbId: string, season: number, episode: number) =>
+      `https://vidsrc.sbs/embed/tv/${tmdbId}/${season}/${episode}`,
+  },
+];
+
+const getUrlOrigin = (url: string) => {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+};
+
 const XemPhim: NextPage<IPageProps> = (props) => {
   const router = useRouter();
 
@@ -149,6 +194,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const [encryptedPayload, setEncryptedPayload] = useState<Record<string, unknown> | null>(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [serverIndex, setServerIndex] = useState(0);
+  const [embedServerIndex, setEmbedServerIndex] = useState(0);
 
   const [proposals, setProposals] = useState<IMovie[]>(initialProposals);
   const [isPart, setIsPart] = useState(false);
@@ -255,6 +301,56 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     return filtered.sort((a, b) => a.episode - b.episode);
   }, [sessions, currentSeasonId, currentType, langItems]);
 
+  const currentSeason = useMemo(
+    () => sessions.find(s => s._id === currentSeasonId),
+    [sessions, currentSeasonId]
+  );
+
+  const embedServerOptions = useMemo<EmbedServerOption[]>(() => {
+    const tmdbId = movie?.tmdb?.id;
+    if (!tmdbId || !currentEpData) {
+      return currentEpData?.embed_url
+        ? [{ id: "api", label: "Default", url: currentEpData.embed_url }]
+        : [];
+    }
+
+    const normalizedTmdbId = encodeURIComponent(String(tmdbId));
+    const seasonNumber = currentSeason?.season_number || 1;
+    const episodeNumber = currentEpData.episode || 1;
+    const isMovie = movie.type === "movie" || movie.tmdb?.type === "movie";
+    const options = EMBED_PROVIDERS.map((provider) => ({
+      id: provider.id,
+      label: provider.label,
+      url: isMovie
+        ? provider.movie(normalizedTmdbId)
+        : provider.tv(normalizedTmdbId, seasonNumber, episodeNumber),
+    }));
+
+    if (currentEpData.embed_url) {
+      options.push({ id: "api", label: "Default", url: currentEpData.embed_url });
+    }
+
+    const seen = new Set<string>();
+    return options.filter((option) => {
+      if (!option.url || seen.has(option.url)) return false;
+      seen.add(option.url);
+      return true;
+    });
+  }, [
+    currentEpData,
+    currentSeason?.season_number,
+    movie?.tmdb?.id,
+    movie?.tmdb?.type,
+    movie?.type,
+  ]);
+
+  const embedPreconnectOrigins = useMemo(() => {
+    const origins = embedServerOptions
+      .map((option) => getUrlOrigin(option.url))
+      .filter(Boolean);
+    return Array.from(new Set(origins));
+  }, [embedServerOptions]);
+
   useEffect(() => {
     if (typeof phan === 'string' && sessions.length) {
       const matched = sessions.find(s => s.slug === phan);
@@ -267,6 +363,12 @@ const XemPhim: NextPage<IPageProps> = (props) => {
       setCurrentType(langItems[0].backendType);
     }
   }, [langItems, currentType]);
+
+  useEffect(() => {
+    if (embedServerIndex >= embedServerOptions.length) {
+      setEmbedServerIndex(0);
+    }
+  }, [embedServerIndex, embedServerOptions.length]);
 
   const fetchAndPlayVideo = useCallback(async (epSlug: string, preferredType?: string, index = 0) => {
     if (!slug || !epSlug) return;
@@ -564,12 +666,19 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const handleChangeType = (newType: string) => {
     setCurrentType(newType);
     setServerIndex(0);
+    setEmbedServerIndex(0);
     const sessionSlug = sessions.find(s => s._id === currentSeasonId)?.slug;
     if (currentEpData) {
       const base = sessionSlug ? `/phim/${slug}/${sessionSlug}/${currentEpData.slug}` : (phan ? `/phim/${slug}/${phan}/${currentEpData.slug}` : `/phim/${slug}/${currentEpData.slug}`);
       router.replace(`${base}?type=${newType}`, undefined, { scroll: false });
       fetchAndPlayVideo(currentEpData.slug, newType, 0);
     }
+  };
+
+  const handleEmbedServerChange = (index: number) => {
+    if (index === embedServerIndex || !embedServerOptions[index]) return;
+    setIframeLoaded(false);
+    setEmbedServerIndex(index);
   };
 
   const handleNextEpisode = useCallback(() => {
@@ -579,6 +688,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
       const nextEp = episodeList[idx + 1];
       setCurrentEpData(nextEp);
       setIframeLoaded(false);
+      setEmbedServerIndex(0);
       const sessionSlug = sessions.find(s => s._id === currentSeasonId)?.slug;
       const base = sessionSlug ? `/phim/${slug}/${sessionSlug}/${nextEp.slug}` : (phan ? `/phim/${slug}/${phan}/${nextEp.slug}` : `/phim/${slug}/${nextEp.slug}`);
       router.push(currentType ? `${base}?type=${currentType}` : base, undefined, { scroll: false });
@@ -609,7 +719,10 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     } else if (!epToPlay && theatricals.length > 0) { epToPlay = theatricals[0]; }
 
     if (epToPlay) {
-      if (currentEpData?.slug !== epToPlay.slug) setIframeLoaded(false);
+      if (currentEpData?.slug !== epToPlay.slug) {
+        setIframeLoaded(false);
+        setEmbedServerIndex(0);
+      }
 
       const sId = typeof epToPlay.season_id === 'string' ? epToPlay.season_id : (epToPlay.season_id as { _id: string })?._id;
       if (sId && sId !== currentSeasonId && !isPart) setCurrentSeasonId(sId);
@@ -674,6 +787,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     setCurrentType(item.type);
     setCurrentEpData(item);
     setIframeLoaded(false);
+    setEmbedServerIndex(0);
     const url = phan ? `/phim/${slug}/${phan}/${item.slug}?type=${item.type}` : `/phim/${slug}/${item.slug}?type=${item.type}`;
     router.push(url, undefined, { scroll: false });
   };
@@ -710,7 +824,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     const video = v as unknown as IEpisodeVideo;
     return !!video.url && video.format !== 'embed';
   });
-  const embedPlayerUrl = currentEpData?.embed_url || "";
+  const activeEmbedServer = embedServerOptions[embedServerIndex] || embedServerOptions[0];
+  const embedPlayerUrl = activeEmbedServer?.url || currentEpData?.embed_url || "";
   const playerSrc = hasSelfHostedVideo ? `${CDN_URL}/?v=captcha-query-20260628-1` : embedPlayerUrl;
   const seoTitle = `${movie.name} (${movie.year}) ${movie.quality || 'HD'} Vietsub - Xem Phim ${movie.origin_name || ''}`;
   const seoDesc = movie.content ? movie.content.replace(/<[^>]*>?/gm, '').substring(0, 160) + "..." : `Xem phim ${movie.name} full HD...`;
@@ -720,6 +835,12 @@ const XemPhim: NextPage<IPageProps> = (props) => {
       <Head>
         <link rel="preconnect" href={CDN_URL} crossOrigin="anonymous" />
         <link rel="dns-prefetch" href={CDN_URL} />
+        {embedPreconnectOrigins.map((origin) => (
+          <React.Fragment key={origin}>
+            <link rel="preconnect" href={origin} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={origin} />
+          </React.Fragment>
+        ))}
       </Head>
       <NextSeo
         title={seoTitle} description={seoDesc} canonical={movieUrl}
@@ -748,7 +869,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
         <div className='relative z-[15] w-full bg-gray-400 md:rounded-t-xl overflow-hidden aspect-video'>
           {playerSrc ? (
             <iframe
-              key={`${currentEpData ? currentEpData._id : 'loading'}-${hasSelfHostedVideo ? 'cdn' : 'embed'}`}
+              key={`${currentEpData ? currentEpData._id : 'loading'}-${hasSelfHostedVideo ? 'cdn' : activeEmbedServer?.id || 'embed'}-${embedServerIndex}`}
               ref={playerRef}
               className="absolute top-0 left-0 w-full h-full"
               id="player"
@@ -779,6 +900,23 @@ const XemPhim: NextPage<IPageProps> = (props) => {
           </div>
         </div>
       </div>
+
+      {!hasSelfHostedVideo && embedServerOptions.length > 1 && (
+        <div className='px-5 lg:px-6 -mt-3 mb-3'>
+          <div className='flex flex-wrap items-center gap-2 rounded-b-xl bg-[#08080A] px-5 pb-4'>
+            <span className='text-xs font-semibold uppercase tracking-wide text-gray-400'>Server phát</span>
+            {embedServerOptions.map((server, index) => (
+              <button
+                key={`${server.id}-${server.url}`}
+                onClick={() => handleEmbedServerChange(index)}
+                className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${index === embedServerIndex ? "border-primary bg-primary/10 text-primary" : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30 hover:text-white"}`}
+              >
+                {server.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className='px-5 lg:px-6'>
         <div className="grid grid-cols-1 lg:grid-cols-11 gap-4">
