@@ -8,6 +8,7 @@ export interface AuthContextType {
   setUser: (user: IUser | null) => void;
   setVip: (vip: boolean) => void;
   setLoading: (loading: boolean) => void;
+  refreshAuth: () => Promise<void>;
   logout: () => void;
 }
 
@@ -19,6 +20,7 @@ export const AuthContext = createContext<AuthContextType>(({
   setVip: () => false,
   setLoading: () => false,
   setUser: () => null,
+  refreshAuth: async () => undefined,
   logout: () => { },
 }));
 export const useAuthContext = () => useContext(AuthContext);

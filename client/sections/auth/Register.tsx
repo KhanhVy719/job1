@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/router";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { useAuthContext } from "@/context/AuthContext";
 type Register = {
   fullname: string;
   email: string;
@@ -20,6 +21,7 @@ type Props = {
 
 const Register: React.FC<Props> = ({ closeAuth }) => {
   const router = useRouter();
+  const { refreshAuth } = useAuthContext();
 
   const { register, handleSubmit } = useForm<Register>();
 
@@ -37,6 +39,7 @@ const Register: React.FC<Props> = ({ closeAuth }) => {
 
       const token = res.data?.token;
       localStorage.setItem("access_token", token);
+      await refreshAuth();
       toast.success(res.data.message);
       router.replace({
         pathname: router.pathname,

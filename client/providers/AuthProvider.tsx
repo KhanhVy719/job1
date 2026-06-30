@@ -40,11 +40,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setVip(false);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const ctrl = new AbortController();
-
-    const fetchData = async () => {
+  const refreshAuth = useCallback(
+    async (signal?: AbortSignal) => {
       const token = localStorage.getItem("access_token");
 
       if (!token) {
@@ -54,41 +51,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
+      setLoading(true);
+
       try {
         const acct = await axiosInstance.get(API_ENDPOINTS.auth.me, {
-          signal: ctrl.signal,
+          signal,
         });
-
-        if (!active) return;
 
         const account = acct.data?.data || null;
         setUser(account);
         setVip(Boolean(account?.vip));
       } catch (error) {
-        if (!active) return;
-
         const requestError = getRequestError(error);
         const isCanceled =
           requestError.code === "ERR_CANCELED" ||
           requestError.message === "canceled";
 
-        if (!isCanceled) {
-          setUser(null);
-          setVip(false);
+        if (isCanceled) return;
 
-          if (requestError.httpStatus === 401) {
-            Cookies.remove("access_token");
-            localStorage.removeItem("access_token");
-          } else {
-            console.warn(
-              "Auth check failed:",
-              requestError.message || requestError
-            );
-          }
+        setUser(null);
+        setVip(false);
+
+        if (requestError.httpStatus === 401) {
+          Cookies.remove("access_token");
+          localStorage.removeItem("access_token");
+        } else {
+          console.warn(
+            "Auth check failed:",
+            requestError.message || requestError
+          );
         }
       } finally {
-        if (active) setLoading(false);
+        if (!signal?.aborted) setLoading(false);
       }
+    },
+    []
+  );
+
+  useEffect(() => {
+    let active = true;
+    const ctrl = new AbortController();
+
+    const fetchData = async () => {
+      if (active) await refreshAuth(ctrl.signal);
     };
 
     void fetchData();
@@ -97,7 +102,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       active = false;
       ctrl.abort();
     };
-  }, [router.asPath]);
+  }, [refreshAuth, router.asPath]);
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -108,9 +113,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setVip,
       setUser,
       setLoading,
+      refreshAuth,
       logout,
     }),
-    [loading, logout, user, vip]
+    [loading, logout, refreshAuth, user, vip]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
