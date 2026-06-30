@@ -50,6 +50,45 @@ async function getEpisodeVideos(id: string): Promise<any | null> {
   return episode.videos ?? null;
 }
 
+const INTERNAL_CORE_BASE_URL = (
+  process.env.INTERNAL_CORE_BASE_URL || "http://server:8001"
+).replace(/\/$/, "");
+const CORE_PUBLIC_HOSTS = (
+  process.env.CORE_PUBLIC_HOSTS || "core.tranhungdaocfs.site"
+)
+  .split(",")
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+function isCorePublicHost(hostname: string): boolean {
+  return CORE_PUBLIC_HOSTS.includes(hostname.toLowerCase());
+}
+
+function toInternalCoreUrl(input: string): string {
+  try {
+    const parsed = new URL(input);
+    if (!isCorePublicHost(parsed.hostname)) return input;
+    return `${INTERNAL_CORE_BASE_URL}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return input;
+  }
+}
+
+function normalizeSourceUrl(input: string): string {
+  const direct = toInternalCoreUrl(input);
+  try {
+    const parsed = new URL(direct);
+    if (parsed.pathname === "/api/v1/hls-proxy/playlist") {
+      const nestedUrl = parsed.searchParams.get("url");
+      if (nestedUrl) parsed.searchParams.set("url", toInternalCoreUrl(nestedUrl));
+      return parsed.toString();
+    }
+  } catch {
+    return direct;
+  }
+  return direct;
+}
+
 interface StreamRequest extends Request {
   params: {
     encryptedToken: string;
@@ -101,18 +140,62 @@ class StreamController {
     return `${protocol}://${host}`;
   }
 
-  private rewriteHlsKeyUris(manifest: string, playlistUrl: string): string {
-    return manifest.replace(
-      /(#EXT-X-KEY:[^\r\n]*URI=")([^"]+)(")/g,
-      (full: string, prefix: string, uri: string, suffix: string) => {
-        try {
-          if (!uri || /^(data:|blob:)/i.test(uri)) return full;
-          return `${prefix}${new URL(uri, playlistUrl).href}${suffix}`;
-        } catch {
-          return full;
+  private proxyUrl(proxyBaseUrl: string, targetUrl: string): string {
+    return `${proxyBaseUrl}${encodeURIComponent(normalizeSourceUrl(targetUrl))}`;
+  }
+
+  private isPlaylistUri(uri: string): boolean {
+    try {
+      const parsed = new URL(uri);
+      return /\.(m3u8|m3u)$/i.test(parsed.pathname);
+    } catch {
+      return /\.(m3u8|m3u)(?:$|\?)/i.test(uri);
+    }
+  }
+
+  private selectVideo(videos: any[], type?: string): any | undefined {
+    if (!Array.isArray(videos)) return undefined;
+    const requestedType = String(type || "").trim();
+    return requestedType
+      ? videos.find((v: any) => v.type === requestedType)
+      : videos.find((v: any) => v.is_default) || videos[0];
+  }
+
+  private rewriteHlsManifest(
+    manifest: string,
+    playlistUrl: string,
+    proxyBaseUrl: string
+  ): string {
+    return String(manifest)
+      .split(/\r?\n/)
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return line;
+
+        if (trimmed.startsWith("#EXT-X-KEY")) {
+          return line.replace(/URI="([^"]+)"/, (full: string, uri: string) => {
+            try {
+              if (!uri || /^(data:|blob:)/i.test(uri)) return full;
+              const absolute = new URL(uri, playlistUrl).href;
+              return `URI="${this.proxyUrl(proxyBaseUrl, absolute)}"`;
+            } catch {
+              return full;
+            }
+          });
         }
-      }
-    );
+
+        if (trimmed.startsWith("#")) return line;
+
+        try {
+          const absolute = /^https?:\/\//i.test(trimmed)
+            ? trimmed
+            : new URL(trimmed, playlistUrl).href;
+          return this.proxyUrl(proxyBaseUrl, absolute);
+        } catch {
+          return line;
+        }
+      })
+      .join("\n");
   }
 
   // --- HANDLE PLAYLIST (M3U8) ---
@@ -155,17 +238,13 @@ class StreamController {
       const videos: any = await getEpisodeVideos(payload.id);
       if (!videos) return res.status(404).send("Not found");
 
-      let video;
-      if (payload.type) {
-        video = videos.find((v: any) => v.type === payload.type);
-      } else {
-        video = videos;
-      }
+      const video = this.selectVideo(videos, payload.type);
 
       if (!video) return res.status(404).send("Not found");
 
       // Fetch file M3U8 gốc
-      const m3u8Response = await axios.get(video.url, {
+      const sourceUrl = normalizeSourceUrl(video.url);
+      const m3u8Response = await axios.get(sourceUrl, {
         timeout: 15000, // Tăng timeout cho mạng yếu
         httpsAgent: ignoreSslAgent,
         httpAgent,
@@ -177,13 +256,7 @@ class StreamController {
       // Rewrite nội dung M3U8
       // Mẹo cho iPhone: Không thêm query param ?ct=&iv= vào link segment nữa
       // Để URL càng sạch càng tốt, tránh lỗi native player
-      const manifestWithKeys = this.rewriteHlsKeyUris(m3u8Response.data, video.url);
-      const rewritten = manifestWithKeys.replace(
-        /^(?!#)(.+m3u8.*)$/gim,
-        (m: string) => {
-            return `${baseUrl}${m.trim()}`; // URL sạch, không kèm rác
-        }
-      );
+      const rewritten = this.rewriteHlsManifest(m3u8Response.data, sourceUrl, baseUrl);
 
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl"); // MIME chuẩn Apple
       // VOD: master playlist ổn định, cache ngắn để đỡ round-trip lặp lại.
@@ -200,7 +273,14 @@ class StreamController {
   public async streamSegment(req: StreamRequest, res: Response) {
     try {
       const { encryptedToken } = req.params;
-      const segmentPath = req.params[0];
+      const rawSegmentPath = req.params[0];
+      const segmentPath = (() => {
+        try {
+          return decodeURIComponent(rawSegmentPath || "");
+        } catch {
+          return rawSegmentPath || "";
+        }
+      })();
 
       if (req.method === "OPTIONS") {
         this.setCorsHeaders(res);
@@ -223,15 +303,18 @@ class StreamController {
       if (!payload) return res.status(403).send("Session Lost");
 
       // --- XỬ LÝ CHILD PLAYLIST (.m3u8 con - cho đa luồng) ---
-      if (segmentPath.endsWith(".m3u8") || segmentPath.endsWith(".m3u")) {
+      if (this.isPlaylistUri(segmentPath)) {
          const videos: any = await getEpisodeVideos(payload.id);
          if (!videos) return res.status(404).end();
 
-         let video = videos.find((v: any) => v.type === payload.type) || videos;
+         const video = this.selectVideo(videos, payload.type);
          if (!video) return res.status(404).end();
 
-         const base = new URL(".", video.url).href;
-         let originUrl = segmentPath.startsWith("http") ? segmentPath : new URL(segmentPath, base).href;
+         const sourceUrl = normalizeSourceUrl(video.url);
+         const base = new URL(".", sourceUrl).href;
+         const originUrl = normalizeSourceUrl(
+           segmentPath.startsWith("http") ? segmentPath : new URL(segmentPath, base).href
+         );
 
          const response = await axios.get(originUrl, {
              timeout: 10000,
@@ -240,19 +323,9 @@ class StreamController {
          });
 
          const host = this.getRequestBaseUrl(req);
-         const lastSlash = segmentPath.lastIndexOf("/");
-         const parent = lastSlash !== -1 ? segmentPath.substring(0, lastSlash + 1) : "";
          const baseUrl = `${host}/stream/${encryptedToken}/seg/`;
 
-         const manifestWithKeys = this.rewriteHlsKeyUris(response.data, originUrl);
-         const rewritten = manifestWithKeys.replace(
-           /^(?!#)(.+)$/gm,
-           (m: string) => {
-             const l = m.trim();
-             if (!l || l.includes("http")) return l;
-             return `${baseUrl}${parent}${l}`; // Link sạch trơn
-           }
-         );
+         const rewritten = this.rewriteHlsManifest(response.data, originUrl, baseUrl);
 
          res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
          // VOD: manifest con ổn định, cache ngắn để đỡ round-trip lặp lại.
@@ -264,11 +337,14 @@ class StreamController {
       const videos: any = await getEpisodeVideos(payload.id);
       if (!videos) return res.status(404).end();
 
-      let video = videos.find((v: any) => v.type === payload.type) || videos;
+      const video = this.selectVideo(videos, payload.type);
       if (!video) return res.status(404).end();
 
-      const base = new URL(".", video.url).href;
-      let originUrl = segmentPath.startsWith("http") ? segmentPath : new URL(segmentPath, base).href;
+      const sourceUrl = normalizeSourceUrl(video.url);
+      const base = new URL(".", sourceUrl).href;
+      const originUrl = normalizeSourceUrl(
+        segmentPath.startsWith("http") ? segmentPath : new URL(segmentPath, base).href
+      );
 
       const response = await axios({
         url: originUrl,

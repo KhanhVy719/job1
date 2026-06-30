@@ -88,6 +88,7 @@ services:
       - "8002:8001"
     volumes:
       - server_upload:/app/upload
+      - server_public_upload:/app/public/upload
       - server_tmp:/app/tmp
     networks: [rophim]
     restart: unless-stopped
@@ -126,6 +127,7 @@ volumes:
   webapi_public:
   webapi_tmp:
   server_upload:
+  server_public_upload:
   server_tmp:
   cdn_tmp:
   ollama_data:
