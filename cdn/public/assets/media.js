@@ -294,20 +294,25 @@ function positionPlayerSeekButtons(player) {
 
     const rewindButton = findPlayerButton(buttonContainer, 'seek-rewind-10', 'Lui 10s');
     const forwardButton = findPlayerButton(buttonContainer, 'seek-forward-10', 'Tien 10s');
-    const playButton = buttonContainer.querySelector('.jw-icon-playback');
     const rightAnchor = buttonContainer.querySelector('.jw-icon-settings')
       || buttonContainer.querySelector('.jw-icon-pip')
       || buttonContainer.querySelector('.jw-icon-fullscreen');
 
     if (rewindButton) {
       rewindButton.classList.add('rop-seek-left');
-      if (playButton && playButton.parentElement === buttonContainer) playButton.after(rewindButton);
-      else buttonContainer.prepend(rewindButton);
     }
     if (forwardButton) {
       forwardButton.classList.add('rop-seek-right');
-      if (rightAnchor && rightAnchor.parentElement === buttonContainer) buttonContainer.insertBefore(forwardButton, rightAnchor);
-      else buttonContainer.appendChild(forwardButton);
+    }
+
+    const anchor = rightAnchor && rightAnchor.parentElement === buttonContainer
+      ? rightAnchor
+      : null;
+    if (rewindButton && rewindButton.parentElement === buttonContainer) {
+      buttonContainer.insertBefore(rewindButton, anchor);
+    }
+    if (forwardButton && forwardButton.parentElement === buttonContainer) {
+      buttonContainer.insertBefore(forwardButton, anchor);
     }
   } catch (_) {}
 }
