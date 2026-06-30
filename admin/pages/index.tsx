@@ -175,7 +175,7 @@ const TinyChart = ({
   color: string;
   reversed?: boolean;
 }) => (
-  <ResponsiveContainer width="100%" height="100%">
+  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
     <LineChart data={data}>
       {reversed ? (
         <YAxis hide domain={["dataMin", "dataMax"]} reversed={true} />
@@ -566,7 +566,7 @@ const HomePage: React.FC = () => {
                 <p className="text-xl font-bold">
                   {gscData?.overview?.totalClicks?.toLocaleString()}
                 </p>
-                <div className="w-16 h-8">
+                <div className="w-16 h-8 min-w-0">
                   {/* Dùng currentColor để dây chart tự ăn theo màu chữ (Trắng khi active, màu gốc khi inactive) */}
                   <TinyChart
                     data={gscData?.trendHistory || []}
@@ -603,7 +603,7 @@ const HomePage: React.FC = () => {
                 <p className="text-xl font-bold">
                   {gscData?.overview?.totalImpressions?.toLocaleString()}
                 </p>
-                <div className="w-16 h-8">
+                <div className="w-16 h-8 min-w-0">
                   <TinyChart
                     data={gscData?.trendHistory || []}
                     dataKey="impressions"
@@ -638,7 +638,7 @@ const HomePage: React.FC = () => {
                 <p className="text-xl font-bold">
                   {gscData?.overview?.avgCtr}%
                 </p>
-                <div className="w-16 h-8">
+                <div className="w-16 h-8 min-w-0">
                   <TinyChart
                     data={gscData?.trendHistory || []}
                     dataKey="ctr"
@@ -673,7 +673,7 @@ const HomePage: React.FC = () => {
                 <p className="text-xl font-bold">
                   {gscData?.overview?.avgPosition}
                 </p>
-                <div className="w-16 h-8">
+                <div className="w-16 h-8 min-w-0">
                   <TinyChart
                     data={gscData?.trendHistory || []}
                     dataKey="position"
@@ -700,9 +700,9 @@ const HomePage: React.FC = () => {
               </span>
             </div>
 
-            <div className="h-[320px] w-full">
+            <div className="h-[320px] w-full min-w-0">
               {gscData?.trendHistory && gscData.trendHistory.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                   <ComposedChart data={gscData.trendHistory}>
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -834,8 +834,8 @@ const HomePage: React.FC = () => {
             <h3 className="font-bold text-zinc-900 mb-2 flex items-center gap-2">
               <Zap size={16} className="text-zinc-400" /> Xu hướng Realtime
             </h3>
-            <div className="flex-1">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="flex-1 min-h-0 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <AreaChart data={gaData?.trafficTrend || []}>
                   <defs>
                     <linearGradient
@@ -880,8 +880,8 @@ const HomePage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex-1">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="flex-1 min-h-0 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <LineChart data={activeNetworkHistory}>
                   <Tooltip
                     contentStyle={{
