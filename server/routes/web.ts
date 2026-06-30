@@ -37,6 +37,8 @@ router.get('/admin/users', AdminController.users);
 router.get('/admin/movies/uploaded', AdminController.uploadedMovies);
 router.get('/admin/movies/:movieId/uploaded-episodes', AdminController.uploadedEpisodes);
 router.delete('/admin/episodes/:episodeId/videos', AdminController.clearEpisodeVideos);
+router.get('/upload/jobs', UploadController.jobs);
+router.post('/upload/jobs/:jobId/cancel', UploadController.cancelJob);
 router.get('/hls-proxy/playlist', HlsProxyController.playlist);
 router.get('/hls-proxy/jw-direct-playlist', HlsProxyController.jwDirectPlaylist);
 router.get('/hls-proxy/segment', HlsProxyController.segment);
@@ -59,6 +61,12 @@ router.post(
   '/upload', 
   uploadMiddleware.single('video'), // 'video' là tên field trong FormData
   UploadController.upload
+);
+
+router.post(
+  '/upload/jobs',
+  uploadMiddleware.single('video'),
+  UploadController.enqueue
 );
 
 router.get(

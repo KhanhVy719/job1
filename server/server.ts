@@ -18,6 +18,7 @@ import { systemStream } from "./services/SystemService";
 import { gaStream, DetailedTrafficData } from "./services/GoogleAnalytics";
 import { gscStream, GSCData } from "./services/SearchConsole";
 import { Worker } from "worker_threads"; // Giữ lại Worker nếu có ý định dùng
+import uploadJobQueue from "./app/services/UploadJobQueue";
 import path from "path";
 
 if (process.env.NODE_ENV !== "production") {
@@ -25,6 +26,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 connectDB();
+uploadJobQueue.start();
 const PORT: number = Number(process.env.PORT) || 8001;
 const HOST_NAME: string = process.env.URL || "localhost";
 

@@ -50,6 +50,8 @@ export const API_ENDPOINTS = {
     tmdb: (tmdb: string) => `/api/v1/movie/${tmdb}/get`,
   },
   upload: "/api/v1/upload",
+  uploadJobs: "/api/v1/upload/jobs",
+  cancelUploadJob: (jobId: string) => `/api/v1/upload/jobs/${jobId}/cancel`,
   category: {
     get: "/api/v1/category/list",
   },

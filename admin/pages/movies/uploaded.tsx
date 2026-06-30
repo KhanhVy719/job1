@@ -1,10 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import axiosInstance from "@/utils/axios";
+import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
 
 type Movie = { _id: string; name: string; origin_name?: string; slug: string; year?: number; type?: string; status?: string; uploadedEpisodes: number };
 type Video = { server_name?: string; name?: string; url: string; type?: string; format?: string; quality?: string; is_default?: boolean };
 type UploadedEpisode = { _id: string; name: string; slug: string; episode: number; embed_url?: string; videos: Video[]; season_id?: { name?: string; slug?: string; season_number?: number } };
 type PreviewState = { url: string; title: string; direct?: boolean } | null;
+type UploadJob = {
+  _id: string;
+  job_id: string;
+  status: "queued" | "running" | "success" | "error" | "canceled";
+  phase?: string;
+  progress: number;
+  message?: string;
+  original_name?: string;
+  movie_name?: string;
+  episode_name?: string;
+  quality?: string;
+  playlist_url?: string;
+  error?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const isActiveUploadJob = (job: UploadJob) => job.status === "queued" || job.status === "running";
 
 export default function UploadedMoviesPage() {
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -16,6 +34,7 @@ export default function UploadedMoviesPage() {
   const [loading, setLoading] = useState(false);
   const [episodeLoading, setEpisodeLoading] = useState(false);
   const [preview, setPreview] = useState<PreviewState>(null);
+  const [jobs, setJobs] = useState<UploadJob[]>([]);
 
   const playableUrl = (url: string) => {
     if (url.includes("/api/v1/hls-proxy/playlist")) return url;
@@ -88,7 +107,44 @@ export default function UploadedMoviesPage() {
     load();
   };
 
+  const loadJobs = () => {
+    axiosInstance.get(API_ENDPOINTS.uploadJobs, { params: { limit: 50 } })
+      .then((res) => {
+        const nextJobs: UploadJob[] = res.data?.data || [];
+        setJobs((prevJobs) => {
+          const previouslyActive = new Set(
+            prevJobs.filter(isActiveUploadJob).map((job) => job.job_id)
+          );
+          const justFinished = nextJobs.some(
+            (job) => previouslyActive.has(job.job_id) && !isActiveUploadJob(job)
+          );
+          if (justFinished) window.setTimeout(load, 0);
+          return nextJobs;
+        });
+      })
+      .catch((error) => console.error("Load upload jobs failed", error));
+  };
+
+  const cancelJob = async (job: UploadJob) => {
+    if (!confirm(`Hủy job upload "${job.original_name || job.job_id}"?`)) return;
+    await axiosInstance.post(API_ENDPOINTS.cancelUploadJob(job.job_id));
+    loadJobs();
+  };
+
+  const jobStatusLabel = (status: UploadJob["status"]) => {
+    if (status === "queued") return "Đang chờ";
+    if (status === "running") return "Đang upload";
+    if (status === "success") return "Hoàn thành";
+    if (status === "canceled") return "Đã hủy";
+    return "Lỗi";
+  };
+
   useEffect(load, []);
+  useEffect(() => {
+    loadJobs();
+    const timer = window.setInterval(loadJobs, 2000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const activeEpisode = useMemo(() => episodes.find((ep) => ep._id === activeEpisodeId) || episodes[0], [episodes, activeEpisodeId]);
   const titleFor = (ep: UploadedEpisode, index = 0) => `${selectedMovie?.name || "Preview"} - ${ep.name} / Source ${index + 1}`;
@@ -109,6 +165,43 @@ export default function UploadedMoviesPage() {
         </button>
         <div className="text-sm text-gray-500">Tổng: <span className="font-semibold text-black">{total}</span> phim</div>
       </div>
+
+      {jobs.length > 0 && <div className="mt-5 rounded-md border bg-white">
+        <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
+          <div>
+            <div className="font-semibold">Hàng đợi upload</div>
+            <div className="text-xs text-gray-500">Tiến độ tự cập nhật mỗi 2 giây, có thể reload trang.</div>
+          </div>
+          <button onClick={loadJobs} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium hover:bg-white">Tải lại</button>
+        </div>
+        <div className="divide-y">
+          {jobs.map((job) => {
+            const active = isActiveUploadJob(job);
+            const progress = Math.max(0, Math.min(100, Math.round(job.progress || 0)));
+            return (
+              <div key={job.job_id} className="px-4 py-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-semibold">{job.original_name || job.job_id}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${job.status === "success" ? "bg-green-100 text-green-700" : job.status === "error" ? "bg-red-100 text-red-700" : job.status === "canceled" ? "bg-gray-100 text-gray-600" : "bg-blue-100 text-blue-700"}`}>{jobStatusLabel(job.status)}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">{job.movie_name || "Chưa rõ phim"}{job.episode_name ? ` - ${job.episode_name}` : ""}</div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div className={`h-full transition-all ${job.status === "error" ? "bg-red-500" : job.status === "success" ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${job.status === "queued" ? 0 : progress}%` }} />
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                      <span>{job.status === "queued" ? "Chờ đến lượt" : `${progress}%`}</span>
+                      <span>{job.message || job.error || "-"}</span>
+                    </div>
+                  </div>
+                  {active && <button onClick={() => cancelJob(job)} className="h-9 rounded-md bg-red-50 px-3 text-xs font-medium text-red-600 hover:bg-red-100">Hủy hàng đợi</button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>}
 
       <div className="overflow-x-auto">
         <table className="mt-5 w-full table-auto text-nowrap rounded-md border-0 bg-white text-left text-sm">

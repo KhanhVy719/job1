@@ -15,6 +15,7 @@ interface TiktokEnvConfig {
 
 // Type cho callback báo tiến độ
 export type ProgressCallback = (percent: number, message: string) => void;
+export type CancelCheck = () => boolean;
 
 class TiktokService {
   private publicDir: string;
@@ -206,7 +207,8 @@ class TiktokService {
   private async spawnFFmpeg(
     args: string[],
     totalDurationSec: number,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    shouldCancel?: CancelCheck
   ): Promise<void> {
     console.log("Run: ffmpeg", args.join(" "));
     return new Promise((resolve, reject) => {
@@ -216,10 +218,33 @@ class TiktokService {
       });
       
       let stderr = "";
+      let canceled = false;
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearInterval(cancelTimer);
+        if (error) reject(error);
+        else resolve();
+      };
+      const cancelTimer = setInterval(() => {
+        if (!shouldCancel?.()) return;
+        canceled = true;
+        try {
+          ps.kill("SIGTERM");
+        } catch {}
+      }, 1000);
       
       ps.stderr.on("data", (d) => {
         const str = d.toString();
         stderr += str;
+        if (shouldCancel?.()) {
+          canceled = true;
+          try {
+            ps.kill("SIGTERM");
+          } catch {}
+          return;
+        }
 
         // Phân tích cú pháp: time=00:00:05.12
         if (onProgress && totalDurationSec > 0) {
@@ -238,8 +263,9 @@ class TiktokService {
       });
 
       ps.on("close", (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`ffmpeg exited ${code}\n${stderr}`));
+        if (canceled) finish(new Error("UPLOAD_JOB_CANCELED"));
+        else if (code === 0) finish();
+        else finish(new Error(`ffmpeg exited ${code}\n${stderr}`));
       });
     });
   }
@@ -467,7 +493,8 @@ class TiktokService {
     segDuration: number = 4,
     totalDurationSec: number, // Thời lượng video tổng (lấy từ probe)
     onProgress?: ProgressCallback,
-    sourceBitrate?: number // bitrate nguồn (bps) để chia segment theo MB
+    sourceBitrate?: number, // bitrate nguồn (bps) để chia segment theo MB
+    shouldCancel?: CancelCheck
   ): Promise<{ jobId: string; playlistUrl: string }> {
     const jobId = uuidv4();
     const config = this.config;
@@ -538,9 +565,11 @@ class TiktokService {
       // Giai đoạn 1: FFmpeg + retry-shrink nếu segment vượt max (0-70%)
       let tsFiles: string[] = [];
       for (let attempt = 1; attempt <= 3; attempt++) {
+        if (shouldCancel?.()) throw new Error("UPLOAD_JOB_CANCELED");
         await clearGeneratedTs();
         console.log(`[Job ${jobId}] FFmpeg attempt ${attempt} với hls_time=${seg}s...`);
-        await this.spawnFFmpeg(buildArgs(seg), totalDurationSec, onProgress);
+        await this.spawnFFmpeg(buildArgs(seg), totalDurationSec, onProgress, shouldCancel);
+        if (shouldCancel?.()) throw new Error("UPLOAD_JOB_CANCELED");
 
         const files = await fsp.readdir(jobPublicDir);
         tsFiles = files.filter((f) => f.endsWith(".ts")).sort();
@@ -582,6 +611,7 @@ class TiktokService {
       let processedFiles = 0;
 
       for (let i = 0; i < tsFiles.length; i += BATCH_SIZE) {
+        if (shouldCancel?.()) throw new Error("UPLOAD_JOB_CANCELED");
         const batch = tsFiles.slice(i, i + BATCH_SIZE);
         
         const promises = batch.map(async (tsFile) => {
@@ -602,6 +632,7 @@ class TiktokService {
         });
 
         const results = await Promise.all(promises);
+        if (shouldCancel?.()) throw new Error("UPLOAD_JOB_CANCELED");
         uploadedData.push(...results);
 
         processedFiles += batch.length;

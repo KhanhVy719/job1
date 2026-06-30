@@ -8,6 +8,7 @@ import { pipeline } from "stream/promises";
 import TiktokService from "./services/TiktokService";
 import Episode, { VideoFormat } from "../../../model/Episode";
 import Movie from "../../../model/Movie";
+import UploadJobQueue from "../../../services/UploadJobQueue";
 import ffmpeg from "fluent-ffmpeg";
 
 interface MulterRequest extends Request {
@@ -263,6 +264,72 @@ class UploadController {
       if (videoInput && videoInput.isTempDownload) {
         await this.cleanupFile(videoInput.filePath);
       }
+    }
+  };
+
+  public enqueue = async (req: Request, res: Response): Promise<void> => {
+    const reqFile = (req as MulterRequest).file;
+
+    try {
+      const sourceUrl = typeof req.body.url === "string" ? req.body.url.trim() : "";
+      if (!reqFile && !sourceUrl) {
+        res.status(400).json({ status: false, message: "No video or URL provided." });
+        return;
+      }
+
+      const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "http")
+        .split(",")[0]
+        .trim();
+      const publicBaseUrl = `${proto}://${req.get("host")}`;
+      const job = await UploadJobQueue.enqueue({
+        jobId: uuidv4(),
+        type: reqFile ? "file" : "url",
+        publicBaseUrl,
+        sourceUrl,
+        filePath: reqFile?.path,
+        originalName: reqFile?.originalname || sourceUrl.split("/").pop()?.split("?")[0] || "Remote video",
+        fileSize: reqFile?.size || 0,
+        episodeId: req.body.episode_id || req.body.episodeId,
+        serverName: req.body.server_name || req.body.serverName || "TikTok Manual Upload",
+        videoType: req.body.type || "phude",
+        seg: Number(req.body.seg || 4),
+      });
+
+      res.status(202).json({ status: true, data: job, message: "Upload job queued" });
+    } catch (error: any) {
+      if (reqFile?.path) await this.cleanupFile(reqFile.path);
+      res.status(500).json({
+        status: false,
+        message: error?.message || "Cannot queue upload job",
+      });
+    }
+  };
+
+  public jobs = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const jobs = await UploadJobQueue.list(Number(req.query.limit) || 50);
+      res.json({ status: true, data: jobs });
+    } catch (error: any) {
+      res.status(500).json({
+        status: false,
+        message: error?.message || "Cannot load upload jobs",
+      });
+    }
+  };
+
+  public cancelJob = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const job = await UploadJobQueue.cancel(req.params.jobId);
+      if (!job) {
+        res.status(404).json({ status: false, message: "Upload job not found" });
+        return;
+      }
+      res.json({ status: true, data: job, message: "Upload job canceled" });
+    } catch (error: any) {
+      res.status(500).json({
+        status: false,
+        message: error?.message || "Cannot cancel upload job",
+      });
     }
   };
 

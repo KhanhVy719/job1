@@ -83,7 +83,7 @@ interface VideoQueueItem {
     file?: File;
     url?: string;
     name: string;
-    status: 'pending' | 'processing' | 'success' | 'error';
+    status: 'pending' | 'queued' | 'processing' | 'success' | 'error';
     progress: number;
     message: string;
     storageId: string;
@@ -134,6 +134,14 @@ interface TMDBResponse {
         movie: { name?: string; origin_name?: string };
         episodes: BackendEpisode[];
     };
+}
+
+interface SavedEpisodeResult {
+    clientId?: string;
+    _id: string;
+    name: string;
+    season: number;
+    episode: number;
 }
 
 // --- 3. HELPER FUNCTIONS ---
@@ -755,6 +763,84 @@ const Upload: React.FC = () => {
     };
     void processQueueItemLegacy;
 
+    const isMongoId = (value?: string | null) => Boolean(value && /^[a-f\d]{24}$/i.test(value));
+
+    const enqueueServerJob = async (
+        item: VideoQueueItem,
+        episodeId: string,
+        serverName: string,
+        videoType: string
+    ): Promise<void> => {
+        const bodyData = new FormData();
+        if (item.type === 'file' && item.file) bodyData.append('video', item.file);
+        if (item.type === 'url' && item.url) bodyData.append('url', item.url);
+        bodyData.append('episode_id', episodeId);
+        bodyData.append('server_name', serverName || item.displayServer || 'TikTok Manual Upload');
+        bodyData.append('type', videoType || item.displayType || 'phude');
+        bodyData.append('seg', '4');
+
+        setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
+            ...qItem,
+            status: 'processing',
+            phase: item.type === 'file' ? 'uploading' : 'queued',
+            progress: 0,
+            uploadProgress: 0,
+            message: item.type === 'file' ? 'Uploading source to server...' : 'Creating server job...'
+        } : qItem));
+
+        const startedAt = Date.now();
+        const res = await axiosInstance.post(API_ENDPOINTS.uploadJobs, bodyData, {
+            onUploadProgress: (event) => {
+                if (item.type !== 'file') return;
+                const loaded = event.loaded || 0;
+                const total = event.total || item.file?.size || 0;
+                const uploadProgress = total > 0 ? clampPercent((loaded / total) * 100) : 0;
+                const elapsedSec = Math.max((Date.now() - startedAt) / 1000, 0.1);
+                const speedBps = loaded / elapsedSec;
+                const etaSeconds = total > 0 && speedBps > 0 ? (total - loaded) / speedBps : undefined;
+
+                setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
+                    ...qItem,
+                    status: 'processing',
+                    phase: 'uploading',
+                    uploadProgress,
+                    uploadedBytes: loaded,
+                    totalBytes: total,
+                    speedBps,
+                    etaSeconds,
+                    progress: uploadProgress,
+                    message: formatUploadProgressMessage(loaded, total, speedBps, etaSeconds)
+                } : qItem));
+            }
+        });
+
+        const job = res.data?.data;
+        setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
+            ...qItem,
+            status: 'queued',
+            phase: 'queued',
+            progress: 0,
+            uploadProgress: item.type === 'file' ? 100 : qItem.uploadProgress,
+            message: 'Queued on server. You can leave this page.',
+            jobId: job?.job_id
+        } : qItem));
+    };
+
+    const findSavedEpisodeId = (
+        savedEpisodes: SavedEpisodeResult[],
+        target: EpisodeUI
+    ): string => {
+        const byClientId = savedEpisodes.find((episode) => episode.clientId === target.id);
+        if (byClientId?._id) return byClientId._id;
+        if (isMongoId(target.id)) return target.id;
+
+        const targetSeason = extractSeasonNumber(target.part);
+        const byName = savedEpisodes.find((episode) =>
+            episode.name === target.name && Number(episode.season) === targetSeason
+        );
+        return byName?._id || "";
+    };
+
     // --- MAIN SUBMIT ---
     const handleMainSubmit = async () => {
         if (!movieConfig.tmdbId && !movieConfig.title) return toast.error("Vui lòng nhập Tên phim hoặc ID TMDB!");
@@ -768,7 +854,7 @@ const Upload: React.FC = () => {
 
         try {
             // 1. Process Queue
-            const pendingItems = videoQueue.filter(i => i.status !== 'success');
+            const pendingItems: VideoQueueItem[] = [];
             let processedQueueItems = [...videoQueue];
 
             if (pendingItems.length > 0) {
@@ -845,7 +931,7 @@ const Upload: React.FC = () => {
                     return ep;
                 });
             } else {
-                if (queueVideosList.length > 0 || (formData.name && formData.name.trim() !== '')) {
+                if (videoQueue.length > 0 || queueVideosList.length > 0 || (formData.name && formData.name.trim() !== '')) {
                     const existingIdx = finalEpisodesList.findIndex(e => e.name === formData.name && e.part === formData.part);
                     const newEpObj: EpisodeUI = {
                         id: Date.now().toString(),
@@ -906,8 +992,26 @@ const Upload: React.FC = () => {
             const res = await axiosInstance.post(API_ENDPOINTS.movie.upload, payload);
 
             if (res.data) {
+                setEpisodes(finalEpisodesList);
+                const savedEpisodes: SavedEpisodeResult[] = res.data?.data?.episodes || [];
+                const targetEpisode =
+                    (selectedId ? finalEpisodesList.find(ep => ep.id === selectedId) : null) ||
+                    finalEpisodesList[finalEpisodesList.length - 1];
+                const itemsToQueue = videoQueue.filter(item => !item.jobId && item.status !== 'queued');
+
+                if (itemsToQueue.length > 0) {
+                    const episodeId = targetEpisode ? findSavedEpisodeId(savedEpisodes, targetEpisode) : "";
+                    if (!episodeId) throw new Error("Không xác định được tập để gắn upload job.");
+
+                    toast.loading("Đang tải source lên server để đưa vào hàng đợi...", { id: toastId });
+                    for (const item of itemsToQueue) {
+                        await enqueueServerJob(item, episodeId, currentServer, currentType);
+                    }
+                    toast.success("Đã đưa video vào hàng đợi. Bạn có thể rời trang hoặc reload.", { id: toastId });
+                    return;
+                }
                 toast.success("Thành công! Đã lưu dữ liệu.", { id: toastId });
-                setVideoQueue([]);
+                setVideoQueue(prev => prev);
             }
 
         } catch (error: unknown) {
@@ -1137,6 +1241,7 @@ const Upload: React.FC = () => {
                                                             <div className="flex items-center space-x-1 flex-1 overflow-hidden">
                                                                 {item.status === 'processing' && <span className="text-[10px] text-blue-600 truncate"><i className="fa-solid fa-sync fa-spin mr-1"></i>{getQueueProgressLabel(item)}</span>}
                                                                 {item.status === 'error' && <span className="text-[10px] text-red-600 truncate">{item.message}</span>}
+                                                                {item.status === 'queued' && <span className="text-[10px] text-amber-600 truncate"><i className="fa-solid fa-clock mr-1"></i>Đang xếp hàng server</span>}
                                                                 {item.status === 'pending' && <span className="text-[10px] text-gray-400">Chờ tải lên</span>}
                                                                 {item.status === 'success' && item.info && <span className="text-[10px] text-green-600 font-medium">{item.info.quality} • {item.info.duration}</span>}
                                                             </div>

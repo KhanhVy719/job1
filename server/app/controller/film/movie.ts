@@ -322,6 +322,13 @@ class MovieController {
       });
 
       const updatedSeasonIds: mongoose.Types.ObjectId[] = [];
+      const savedEpisodes: Array<{
+        clientId?: string;
+        _id: mongoose.Types.ObjectId;
+        name: string;
+        season: number;
+        episode: number;
+      }> = [];
 
       for (const [seasonNum, epList] of episodesBySeason) {
         let season = await Season.findOne({
@@ -383,7 +390,7 @@ class MovieController {
             : fallbackSubtitles;
 
           // Bây giờ `this.toSlug` và `this.parseDuration` sẽ hoạt động chính xác
-          await Episode.findOneAndUpdate(
+          const episodeDoc = await Episode.findOneAndUpdate(
             {
               movie_id: movie._id,
               season_id: season._id,
@@ -412,6 +419,15 @@ class MovieController {
               setDefaultsOnInsert: true,
             }
           );
+          if (episodeDoc) {
+            savedEpisodes.push({
+              clientId: item.id,
+              _id: episodeDoc._id as mongoose.Types.ObjectId,
+              name: episodeDoc.name,
+              season: seasonNum,
+              episode: episodeDoc.episode,
+            });
+          }
 
         }
 
@@ -456,6 +472,7 @@ class MovieController {
           tmdbId: movie_id,
           totalEpisodes: totalEpisodes,
           seasonsUpdated: updatedSeasonIds.length,
+          episodes: savedEpisodes,
         },
       });
     } catch (error: any) {
