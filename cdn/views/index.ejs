@@ -102,8 +102,7 @@
         .jw-state-idle.jw-flag-cardboard-available .jw-controlbar .custom-controls,
         .jw-state-idle.jw-flag-cast-available:not(.jw-flag-audio-player) .jw-controlbar .jw-icon:not(.jw-icon-cardboard):not(.jw-icon-cast):not(.jw-icon-airplay),
         .jw-state-idle.jw-flag-cast-available:not(.jw-flag-audio-player) .jw-controlbar .custom-controls,
-        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration::before,
-        .jw-button-container .jw-button-color {
+        .jw-icon.jw-icon-inline.jw-text.jw-reset.jw-text-duration::before {
             display: none !important;
         }
 
@@ -260,7 +259,10 @@
             }
 
             .jw-reset.jw-button-container {
-                display: none !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: flex-end !important;
+                width: 100% !important;
             }
 
             .jwplayer.jw-stretch-uniform .jw-media video {
@@ -286,7 +288,7 @@
         let currentPlaylistSources = []; // Lưu danh sách các nguồn (Server)
         let currentSourceIndex = 0;      // Lưu chỉ số nguồn đang phát
     </script>
-    <script src="/assets/media.js"></script>
+    <script src="/assets/media.js?v=controls-20260630-1"></script>
 
 </body>
 

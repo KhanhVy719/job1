@@ -47,6 +47,14 @@ function getJwPlayerConfig(config) {
     controls: true,
     autostart: false,
     stretching: 'uniform',
+    playbackRateControls: true,
+    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+    captions: {
+      color: '#ffffff',
+      fontSize: 15,
+      backgroundOpacity: 35,
+      edgeStyle: 'dropshadow',
+    },
     analytics: { enabled: false },
     ...config,
   };
@@ -65,14 +73,76 @@ function isAllowedPlayerOrigin(origin) {
 
 let lastPlayRequestKey = '';
 
-function setupJwPlayer(src, title) {
-  jwplayer('player').setup(getJwPlayerConfig({
+function svgDataUri(svg) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+const playerButtonIcons = {
+  rewind: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M20 14 10 24l10 10V14Z"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M36 14 26 24l10 10V14Z"/></svg>'),
+  forward: svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="m28 14 10 10-10 10V14Z"/><path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="m12 14 10 10-10 10V14Z"/></svg>'),
+};
+
+function seekRelative(player, deltaSeconds) {
+  const position = Number(player.getPosition?.() || 0);
+  const duration = Number(player.getDuration?.() || 0);
+  const target = duration > 0
+    ? Math.max(0, Math.min(duration - 1, position + deltaSeconds))
+    : Math.max(0, position + deltaSeconds);
+  player.seek(target);
+}
+
+function addPlayerButton(player, icon, tooltip, id, onClick) {
+  try {
+    if (typeof player.removeButton === 'function') player.removeButton(id);
+  } catch (_) {}
+  try {
+    player.addButton(icon, tooltip, onClick, id, `rop-${id}`);
+  } catch (_) {}
+}
+
+function enhanceJwPlayer(player) {
+  const addButtons = () => {
+    addPlayerButton(player, playerButtonIcons.rewind, 'Lui 10s', 'seek-back-10', () => seekRelative(player, -10));
+    addPlayerButton(player, playerButtonIcons.forward, 'Tien 10s', 'seek-forward-10', () => seekRelative(player, 10));
+  };
+
+  try {
+    if (typeof player.once === 'function') player.once('ready', addButtons);
+    else player.on('ready', addButtons);
+  } catch (_) {
+    addButtons();
+  }
+}
+
+function normalizeTracks(tracks) {
+  if (!Array.isArray(tracks)) return [];
+  return tracks
+    .filter((track) => track && track.file)
+    .map((track, index) => ({
+      file: track.file,
+      label: track.label || track.name || `Subtitle ${index + 1}`,
+      kind: track.kind || 'captions',
+      default: Boolean(track.default),
+    }));
+}
+
+function setupJwPlayer(src, title, tracks = []) {
+  const playlistItem = {
+    title,
+    sources: [{ file: src, label: 'HLS', type: 'hls', default: true }],
+  };
+  const normalizedTracks = normalizeTracks(tracks);
+  if (normalizedTracks.length) playlistItem.tracks = normalizedTracks;
+
+  const player = jwplayer('player');
+  player.setup(getJwPlayerConfig({
     displaytitle: true,
     abouttext: 'Rổ Phim',
     aboutlink: '/',
     bigPlayButton: true,
-    playlist: [{ title, sources: [{ file: src, label: 'HLS', type: 'hls', default: true }] }]
+    playlist: [playlistItem]
   }));
+  enhanceJwPlayer(player);
 }
 
 async function rewriteTikTokPlaylistForServiceWorker(src) {
@@ -217,12 +287,19 @@ window.addEventListener('message', (event) => {
         showPlayerError('Không tìm thấy nguồn phát cho tập này.');
         return;
       }
-      const playlist = payload.playlist.map((item) => ({
-        title: item.title,
-        image: item.image,
-        sources: item.sources.map((s) => ({ file: `${s.file}?ct=${value.ct}&iv=${value.iv}`, label: s.label, type: 'hls', default: s.default || false }))
-      }));
-      jwplayer('player').setup(getJwPlayerConfig({ playlist }));
+      const playlist = payload.playlist.map((item) => {
+        const playlistItem = {
+          title: item.title,
+          image: item.image,
+          sources: item.sources.map((s) => ({ file: `${s.file}?ct=${value.ct}&iv=${value.iv}`, label: s.label, type: 'hls', default: s.default || false }))
+        };
+        const tracks = normalizeTracks(item.tracks);
+        if (tracks.length) playlistItem.tracks = tracks;
+        return playlistItem;
+      });
+      const player = jwplayer('player');
+      player.setup(getJwPlayerConfig({ playlist }));
+      enhanceJwPlayer(player);
     },
     error: function (xhr) {
       lastPlayRequestKey = '';
