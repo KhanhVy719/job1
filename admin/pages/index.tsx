@@ -164,6 +164,37 @@ const formatDateShort = (dateStr: string) => {
   return `${d.getDate()}/${d.getMonth() + 1}`;
 };
 
+const useElementSize = () => {
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      setSize({
+        width: Math.max(0, Math.floor(rect.width)),
+        height: Math.max(0, Math.floor(rect.height)),
+      });
+    };
+
+    update();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return { ref, ...size };
+};
+
 const TinyChart = ({
   data,
   dataKey,
@@ -207,6 +238,7 @@ const HomePage: React.FC = () => {
     Record<string, NetworkPoint[]>
   >({});
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  const networkChart = useElementSize();
 
   // Toggle chart chính
   const [showClicks, setShowClicks] = useState(true);
@@ -886,10 +918,15 @@ const HomePage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex-1 min-h-0 min-w-0">
-              {activeNetworkHistory.length >= 2 && (
-                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                  <LineChart data={activeNetworkHistory}>
+            <div ref={networkChart.ref} className="flex-1 min-h-0 min-w-0">
+              {activeNetworkHistory.length >= 2 &&
+                networkChart.width > 0 &&
+                networkChart.height > 0 && (
+                  <LineChart
+                    width={networkChart.width}
+                    height={networkChart.height}
+                    data={activeNetworkHistory}
+                  >
                   <Tooltip
                     contentStyle={{
                       borderRadius: "8px",
@@ -918,8 +955,7 @@ const HomePage: React.FC = () => {
                     name="Tải lên"
                   />
                   </LineChart>
-                </ResponsiveContainer>
-              )}
+                )}
             </div>
           </div>
         </div>
