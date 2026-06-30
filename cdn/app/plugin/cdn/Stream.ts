@@ -89,6 +89,17 @@ function normalizeSourceUrl(input: string): string {
   return direct;
 }
 
+function unwrapHlsProxySegmentUrl(input: string): string {
+  try {
+    const parsed = new URL(input);
+    if (parsed.pathname !== "/api/v1/hls-proxy/segment") return input;
+    const nestedUrl = parsed.searchParams.get("url");
+    return nestedUrl && /^https?:\/\//i.test(nestedUrl) ? nestedUrl : input;
+  } catch {
+    return input;
+  }
+}
+
 interface StreamRequest extends Request {
   params: {
     encryptedToken: string;
@@ -154,8 +165,11 @@ class StreamController {
     useServiceWorkerDirect: boolean
   ): string {
     const normalized = normalizeSourceUrl(targetUrl);
-    if (useServiceWorkerDirect && !this.isPlaylistUri(normalized)) {
-      return `/sw-hls/segment?url=${encodeURIComponent(normalized)}`;
+    const directTarget = useServiceWorkerDirect
+      ? unwrapHlsProxySegmentUrl(normalized)
+      : normalized;
+    if (useServiceWorkerDirect && !this.isPlaylistUri(directTarget)) {
+      return `/sw-hls/segment?url=${encodeURIComponent(directTarget)}`;
     }
     return this.proxyUrl(proxyBaseUrl, normalized, useServiceWorkerDirect ? "?sw=1" : "");
   }

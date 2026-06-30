@@ -195,16 +195,18 @@ function setupJwPlaylistWithFallback(serverPlaylist, value, useServiceWorkerDire
     setupPlaylist(proxyPlaylist, 'proxy-fallback');
   };
 
-  if (useServiceWorkerDirect) {
+  const attachFallbackHandler = () => {
+    if (!useServiceWorkerDirect) return;
     try {
       window.__ropDirectHlsFallbackHandler = fallbackToProxy;
       player.on('error', fallbackToProxy);
       player.on('setupError', fallbackToProxy);
     } catch (_) {}
-  }
+  };
 
   try {
     setupPlaylist(directPlaylist, useServiceWorkerDirect ? 'direct' : 'proxy');
+    attachFallbackHandler();
   } catch (error) {
     if (!useServiceWorkerDirect) throw error;
     fallbackToProxy(error);
