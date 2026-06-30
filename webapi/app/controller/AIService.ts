@@ -1,4 +1,3 @@
-import { Ollama } from "ollama";
 import Category from "../model/Category";
 import Country from "../model/Country";
 import Movie from "../model/Movie";
@@ -7,6 +6,17 @@ export interface AICreativeSection {
   title: string;
   filters: any;
 }
+
+type OllamaChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+type OllamaChatPayload = {
+  message?: {
+    content?: string;
+  };
+};
 
 let DYNAMIC_VOCAB = {
   prefixes: [] as string[],
@@ -25,22 +35,60 @@ let DB_CACHE = {
   lastUpdated: 0,
 };
 
+const STATIC_VOCAB = {
+  prefixes: ["Top", "Tuyển tập", "Đề cử", "Đáng xem", "Nổi bật"],
+  adjectives: ["gay cấn", "cuốn hút", "đặc sắc", "mới nhất", "đáng chú ý"],
+  verbs: ["Khám phá", "Thưởng thức", "Xem ngay", "Chọn lọc", "Bắt đầu"],
+  nouns: ["bộ sưu tập", "lựa chọn", "chủ đề", "danh sách", "gu phim"],
+  suffixes: ["đáng xem nhất", "cho cuối tuần", "không nên bỏ lỡ", "hot hiện nay"],
+  emojis: [] as string[],
+  templates: [
+    "{keyword} đáng xem nhất",
+    "Tuyển tập {keyword}",
+    "{keyword} không nên bỏ lỡ",
+    "Đề cử {keyword} cho bạn",
+  ],
+};
+
 const SEARCH_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 30 * 60 * 1000;
 
 const TITLE_HISTORY = new Set<string>();
 const MAX_HISTORY_SIZE = 2000;
 
+const envNumber = (key: string, fallback: number) => {
+  const value = Number(process.env[key]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+const OLLAMA_HOST = (process.env.OLLAMA_HOST || "http://ollama:11434").replace(/\/$/, "");
+const AI_TIMEOUT_MS = envNumber("AI_OLLAMA_TIMEOUT_MS", 8000);
+const AI_FAILURE_COOLDOWN_MS = envNumber("AI_FAILURE_COOLDOWN_MS", 5 * 60 * 1000);
+const AI_VOCAB_REFRESH_MS = envNumber("AI_VOCAB_REFRESH_MS", 6 * 60 * 60 * 1000);
+const AI_SEMANTIC_MIN_INTERVAL_MS = envNumber("AI_SEMANTIC_MIN_INTERVAL_MS", 30 * 1000);
+const ENABLE_AI_VOCAB_WORKER = process.env.AI_ENABLE_VOCAB_WORKER === "true";
+const ENABLE_SEMANTIC_AI = process.env.AI_ENABLE_SEMANTIC_SEARCH !== "false";
+
+let creativeRefreshInFlight: Promise<void> | null = null;
+let creativeRefreshDisabledUntil = 0;
+let semanticSearchInFlight: Promise<any> | null = null;
+let semanticSearchDisabledUntil = 0;
+let semanticSearchNextAllowedAt = 0;
+
 class AIService {
-  private static client = new Ollama({ host: process.env.OLLAMA_HOST || "http://ollama:11434" });
-  private static MODEL = "qwen2.5:1.5b";
+  private static MODEL = process.env.OLLAMA_MODEL || "qwen2.5:1.5b";
 
   public static async initWorker() {
-    console.log("🚀 AI Creative Worker started...");
-    await this._refreshCreativeVocabulary();
     await this._refreshDbCache();
-    setInterval(() => this._refreshCreativeVocabulary(), 10 * 60 * 1000);
-    setInterval(() => this._refreshDbCache(), 60 * 60 * 1000);
+    if (!ENABLE_AI_VOCAB_WORKER) {
+      console.log("AI Creative Worker disabled.");
+      return;
+    }
+
+    console.log("AI Creative Worker started.");
+    void this._refreshCreativeVocabulary();
+    setInterval(() => void this._refreshCreativeVocabulary(), AI_VOCAB_REFRESH_MS);
+    setInterval(() => void this._refreshDbCache(), 60 * 60 * 1000);
   }
 
   private static async _refreshDbCache() {
@@ -57,36 +105,84 @@ class AIService {
     }
   }
 
-  private static async _refreshCreativeVocabulary() {
+  private static _fallbackSearchData(description: string) {
+    const keywords = description
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter((word) => word.length > 1)
+      .slice(0, 8);
+
+    return {
+      predicted_titles: [description],
+      keywords,
+    };
+  }
+
+  private static async _chatJson(
+    messages: OllamaChatMessage[],
+    options: Record<string, any> = {}
+  ) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(1000, AI_TIMEOUT_MS));
+
     try {
-      const response = await this.client.chat({
-        model: this.MODEL,
-        format: "json",
-        messages: [
+      const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.MODEL,
+          format: "json",
+          stream: false,
+          messages,
+          options,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama chat failed with HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as OllamaChatPayload;
+      const content = String(payload.message?.content || "")
+        .replace(/```json|```/g, "")
+        .trim();
+
+      return JSON.parse(content);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private static async _refreshCreativeVocabulary() {
+    const now = Date.now();
+    if (creativeRefreshInFlight) return creativeRefreshInFlight;
+    if (now < creativeRefreshDisabledUntil) return;
+
+    creativeRefreshInFlight = this._doRefreshCreativeVocabulary().finally(() => {
+      creativeRefreshInFlight = null;
+    });
+
+    return creativeRefreshInFlight;
+  }
+
+  private static async _doRefreshCreativeVocabulary() {
+    try {
+      const data = await this._chatJson(
+        [
           {
             role: "system",
             content: `You are a creative Vietnamese movie copywriter.
-            Generate a JSON object with unique, trendy, slang Vietnamese words for movie titles.
-            Fields: verbs, adjectives, nouns, prefixes, suffixes, emojis, templates.
-            Generate 10 items for EACH category.`,
+Generate a JSON object with unique, trendy, slang Vietnamese words for movie titles.
+Fields: verbs, adjectives, nouns, prefixes, suffixes, emojis, templates.
+Generate 10 items for EACH category.`,
           },
           { role: "user", content: "Give me fresh vocabulary." },
         ],
-      });
-
-      let cleanContent = response.message.content
-        .replace(/```json|```/g, "")
-        .trim();
-      let data;
-      try {
-        data = JSON.parse(cleanContent);
-      } catch (e) {
-        console.error("AI JSON Parse Error", e); // Thêm log lỗi JSON
-        return;
-      }
+        { temperature: 0.8 }
+      );
 
       const merge = (oldArr: string[], newArr: any[]): string[] => {
-        // Lọc: Đảm bảo các phần tử là chuỗi và không rỗng
         const safeNewArr = (newArr || []).filter(
           (item) => typeof item === "string" && item.trim().length > 0
         );
@@ -96,10 +192,7 @@ class AIService {
       };
 
       DYNAMIC_VOCAB.verbs = merge(DYNAMIC_VOCAB.verbs, data.verbs);
-      DYNAMIC_VOCAB.adjectives = merge(
-        DYNAMIC_VOCAB.adjectives,
-        data.adjectives
-      );
+      DYNAMIC_VOCAB.adjectives = merge(DYNAMIC_VOCAB.adjectives, data.adjectives);
       DYNAMIC_VOCAB.nouns = merge(DYNAMIC_VOCAB.nouns, data.nouns);
       DYNAMIC_VOCAB.prefixes = merge(DYNAMIC_VOCAB.prefixes, data.prefixes);
       DYNAMIC_VOCAB.suffixes = merge(DYNAMIC_VOCAB.suffixes, data.suffixes);
@@ -110,8 +203,9 @@ class AIService {
       if (TITLE_HISTORY.size > MAX_HISTORY_SIZE) TITLE_HISTORY.clear();
 
       console.log("AI Vocabulary Updated & Merged!");
-    } catch {
-      console.error("AI Update Error");
+    } catch (error: any) {
+      creativeRefreshDisabledUntil = Date.now() + AI_FAILURE_COOLDOWN_MS;
+      console.error("AI Update Error", error?.message || error);
     }
   }
 
@@ -120,14 +214,25 @@ class AIService {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
+  private static _getTitleVocab() {
+    return {
+      prefixes: DYNAMIC_VOCAB.prefixes.length ? DYNAMIC_VOCAB.prefixes : STATIC_VOCAB.prefixes,
+      adjectives: DYNAMIC_VOCAB.adjectives.length ? DYNAMIC_VOCAB.adjectives : STATIC_VOCAB.adjectives,
+      verbs: DYNAMIC_VOCAB.verbs.length ? DYNAMIC_VOCAB.verbs : STATIC_VOCAB.verbs,
+      nouns: DYNAMIC_VOCAB.nouns.length ? DYNAMIC_VOCAB.nouns : STATIC_VOCAB.nouns,
+      suffixes: DYNAMIC_VOCAB.suffixes.length ? DYNAMIC_VOCAB.suffixes : STATIC_VOCAB.suffixes,
+      emojis: DYNAMIC_VOCAB.emojis.length ? DYNAMIC_VOCAB.emojis : STATIC_VOCAB.emojis,
+      templates: DYNAMIC_VOCAB.templates.length ? DYNAMIC_VOCAB.templates : STATIC_VOCAB.templates,
+    };
+  }
+
   private static _assembleTitle(keyword: string): string {
-    if (DYNAMIC_VOCAB.adjectives.length === 0)
-      return `Phim ${keyword} Hay Nhất`;
+    const p = this._getTitleVocab();
     let title = "";
     let attempts = 0;
+
     do {
       const mode = Math.random();
-      const p = DYNAMIC_VOCAB;
       const verb = String(this._getRandom(p.verbs) || "");
       const adj = String(this._getRandom(p.adjectives) || "");
       const noun = String(this._getRandom(p.nouns) || "");
@@ -162,8 +267,6 @@ class AIService {
 
   static async generateFastSection(): Promise<AICreativeSection> {
     if (DB_CACHE.categories.length === 0) await this._refreshDbCache();
-    if (DYNAMIC_VOCAB.adjectives.length === 0)
-      this._refreshCreativeVocabulary();
 
     const dice = Math.random();
     const filters: any = {};
@@ -197,6 +300,62 @@ class AIService {
     return { title, filters };
   }
 
+  private static async _getSemanticSearchData(description: string, cacheKey: string) {
+    const now = Date.now();
+    const cached = SEARCH_CACHE.get(cacheKey);
+
+    if (cached && now - cached.timestamp < CACHE_TTL) {
+      console.log(`Using AI Cache for: "${description}"`);
+      return cached.data;
+    }
+
+    let aiData: any;
+    const canUseAi =
+      ENABLE_SEMANTIC_AI &&
+      now >= semanticSearchDisabledUntil &&
+      now >= semanticSearchNextAllowedAt &&
+      !semanticSearchInFlight;
+
+    if (!canUseAi) {
+      aiData = this._fallbackSearchData(description);
+    } else {
+      console.log(`AI Analyzing: "${description}"`);
+      semanticSearchNextAllowedAt = now + AI_SEMANTIC_MIN_INTERVAL_MS;
+      semanticSearchInFlight = this._chatJson(
+        [
+          {
+            role: "system",
+            content: `You are a semantic search engine for a Vietnamese movie database.
+Analyze the user's query. Return a JSON object with:
+1. "predicted_titles": Array of strings. Guess exact movie names.
+2. "keywords": Array of strings. Extract core topics, synonyms in Vietnamese.
+3. "year": Number or null.`,
+          },
+          { role: "user", content: description },
+        ],
+        { temperature: 0.2 }
+      ).finally(() => {
+        semanticSearchInFlight = null;
+      });
+
+      try {
+        aiData = await semanticSearchInFlight;
+      } catch (error: any) {
+        semanticSearchDisabledUntil = Date.now() + AI_FAILURE_COOLDOWN_MS;
+        console.error("Semantic AI Error", error?.message || error);
+        aiData = this._fallbackSearchData(description);
+      }
+    }
+
+    SEARCH_CACHE.set(cacheKey, { data: aiData, timestamp: now });
+    if (SEARCH_CACHE.size > 500) {
+      const firstKey = SEARCH_CACHE.keys().next().value;
+      if (firstKey) SEARCH_CACHE.delete(firstKey);
+    }
+
+    return aiData;
+  }
+
   static async searchByNaturalLanguage(
     description: string,
     page: number = 1,
@@ -207,54 +366,7 @@ class AIService {
         return { items: [], totalItems: 0 };
 
       const cacheKey = description.toLowerCase().trim();
-      let aiData;
-
-      const cached = SEARCH_CACHE.get(cacheKey);
-      const now = Date.now();
-
-      if (cached && now - cached.timestamp < CACHE_TTL) {
-        console.log(`⚡ Using AI Cache for: "${description}"`);
-        aiData = cached.data;
-      } else {
-        console.log(`🤖 AI Analyzing: "${description}"`);
-
-        const aiResponse = await this.client.chat({
-          model: this.MODEL,
-          format: "json",
-          messages: [
-            {
-              role: "system",
-              content: `You are a semantic search engine for a Vietnamese movie database.
-              Analyze the user's query. Return a JSON object with:
-              1. "predicted_titles": Array of strings. Guess exact movie names.
-              2. "keywords": Array of strings. Extract core topics, synonyms in Vietnamese.
-              3. "year": Number or null.
-              `,
-            },
-            { role: "user", content: description },
-          ],
-          options: { temperature: 0.2 }, // Giảm nhiệt độ để kết quả ổn định hơn
-        });
-
-        try {
-          const cleanJson = aiResponse.message.content
-            .replace(/```json|```/g, "")
-            .trim();
-          aiData = JSON.parse(cleanJson);
-        } catch (e) {
-          aiData = { predicted_titles: [], keywords: description.split(" ") };
-        }
-
-        // Lưu vào cache
-        SEARCH_CACHE.set(cacheKey, { data: aiData, timestamp: now });
-
-        // Dọn dẹp cache nếu quá lớn (tránh tràn RAM)
-        if (SEARCH_CACHE.size > 500) {
-          const firstKey = SEARCH_CACHE.keys().next().value;
-          if (firstKey) SEARCH_CACHE.delete(firstKey);
-        }
-      }
-
+      const aiData = await this._getSemanticSearchData(description, cacheKey);
       const { predicted_titles, keywords } = aiData;
       const orConditions: any[] = [];
 
