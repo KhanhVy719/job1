@@ -143,6 +143,8 @@ const EMBED_PROVIDERS = [
   },
 ];
 
+const SELF_HOSTED_PLAYER_VERSION = "captcha-query-20260630-allow-origin";
+
 const getUrlOrigin = (url: string) => {
   try {
     return new URL(url).origin;
@@ -806,7 +808,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
   const activeEmbedServer = embedServerOptions[0];
   const embedPlayerUrl = activeEmbedServer?.url || "";
   const hasLoadedSource = !!currentEpData?._id && loadedSourceEpisodeId === currentEpData._id;
-  const playerSrc = hasLoadedSource ? (hasSelfHostedVideo ? `${CDN_URL}/?v=captcha-query-20260628-1` : embedPlayerUrl) : "";
+  const playerSrc = hasLoadedSource ? (hasSelfHostedVideo ? `${CDN_URL}/?v=${SELF_HOSTED_PLAYER_VERSION}` : embedPlayerUrl) : "";
   const seoTitle = `${movie.name} (${movie.year}) ${movie.quality || 'HD'} Vietsub - Xem Phim ${movie.origin_name || ''}`;
   const seoDesc = movie.content ? movie.content.replace(/<[^>]*>?/gm, '').substring(0, 160) + "..." : `Xem phim ${movie.name} full HD...`;
   const sessionSlug = sessions.find(s => s._id === currentSeasonId)?.slug;
