@@ -212,13 +212,9 @@ class PlayController {
       };
     }
 
-    // Check IP
-    const normalizedSlugIP = obj.ip.replace("::ffff:", "");
-    const normalizedReqIP = reqIP.replace("::ffff:", "");
-
-    if (normalizedSlugIP !== normalizedReqIP) {
-      return { isValid: false, reason: "IP address changed" };
-    }
+    // Do not hard-bind playback to IP here. In production the page request and
+    // CDN iframe request can pass through different Cloudflare edge IPs, so an
+    // exact IP match blocks valid viewers even though the encrypted token is OK.
 
     // Check Webdriver (Automation)
     if (x2Data.browser && x2Data.browser.webdriver === true) {
@@ -264,6 +260,8 @@ class PlayController {
 
   private getClientIp(req: Request): string {
     const ip =
+      (req.headers["cf-connecting-ip"] as string) ||
+      (req.headers["x-real-ip"] as string) ||
       (req.headers["x-forwarded-for"] as string) ||
       req.socket.remoteAddress ||
       "";

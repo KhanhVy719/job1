@@ -208,6 +208,11 @@ window.addEventListener('message', (event) => {
     dataType: 'json',
     data: { slug: value.t, ct: value.ct, iv: value.iv, type: value.type },
     success: function (payload) {
+      if (payload.action === 'captcha') {
+        lastPlayRequestKey = '';
+        showPlayerError(payload.reason ? `Không tải được nguồn phát: ${payload.reason}` : 'Cần xác thực bảo mật để phát phim.');
+        return;
+      }
       if (!payload.playlist || !payload.playlist.length) {
         showPlayerError('Không tìm thấy nguồn phát cho tập này.');
         return;
