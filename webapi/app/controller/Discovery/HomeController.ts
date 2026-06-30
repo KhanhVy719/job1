@@ -4,6 +4,7 @@ import { FilterQuery } from "mongoose";
 import https from "https";
 import Movie from "../../model/Movie";
 import Episode from "../../model/Episode";
+import Season from "../../model/Season";
 import ScheduledEpisode from "../../model/ScheduledEpisode";
 import Category from "../../model/Category";
 import Country from "../../model/Country";
@@ -25,6 +26,55 @@ const scheduleHttpsAgent = new https.Agent({
 });
 
 class HomeController {
+  private static async _attachFirstPlayUrls(movies: any[]) {
+    if (!Array.isArray(movies) || movies.length === 0) return movies;
+
+    const movieIds = movies.map((movie) => movie?._id).filter(Boolean);
+    if (movieIds.length === 0) return movies;
+
+    const seasons = await Season.find({ movie_id: { $in: movieIds } })
+      .select("_id movie_id slug season_number")
+      .sort({ season_number: 1 })
+      .lean();
+
+    const firstSeasonByMovie = new Map<string, any>();
+    for (const season of seasons) {
+      const movieId = String(season.movie_id);
+      if (!firstSeasonByMovie.has(movieId)) {
+        firstSeasonByMovie.set(movieId, season);
+      }
+    }
+
+    const firstSeasons = Array.from(firstSeasonByMovie.values());
+    const seasonIds = firstSeasons.map((season) => season._id).filter(Boolean);
+    if (seasonIds.length === 0) return movies;
+
+    const episodes = await Episode.find({ season_id: { $in: seasonIds } })
+      .select("season_id slug episode sort_order types videos.type")
+      .sort({ season_id: 1, episode: 1, sort_order: 1 })
+      .lean();
+
+    const firstEpisodeBySeason = new Map<string, any>();
+    for (const episode of episodes) {
+      const seasonId = String(episode.season_id);
+      if (!firstEpisodeBySeason.has(seasonId)) {
+        firstEpisodeBySeason.set(seasonId, episode);
+      }
+    }
+
+    return movies.map((movie) => {
+      const season = firstSeasonByMovie.get(String(movie._id));
+      const episode = season ? firstEpisodeBySeason.get(String(season._id)) : null;
+      const playbackType = episode?.types?.[0] || episode?.videos?.[0]?.type || "phude";
+      const playUrl =
+        movie?.slug && season?.slug && episode?.slug
+          ? `/phim/${movie.slug}/${season.slug}/${episode.slug}?type=${encodeURIComponent(playbackType)}`
+          : undefined;
+
+      return playUrl ? { ...movie, play_url: playUrl } : movie;
+    });
+  }
+
   private static async _buildQueryConfig(config: any) {
     const baseQuery: any = { ...VALID_IMAGE_CONSTRAINT };
 
@@ -263,6 +313,7 @@ class HomeController {
         sliderTask,
         ...sectionTasks,
       ]);
+      const sliderWithPlayUrls = await this._attachFirstPlayUrls(slider);
 
       const validSections = sectionsRaw.filter(
         (s: any) => s && s.data.length > 0
@@ -275,7 +326,7 @@ class HomeController {
       res.json({
         status: true,
         data: {
-          slider,
+          slider: sliderWithPlayUrls,
           sections: validSections,
           remainingSectionsConfig: remaining,
         },

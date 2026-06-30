@@ -3,6 +3,7 @@ interface IMovie {
   name: string;
   origin_name: string;
   slug: string;
+  play_url?: string;
   content: string;
   type: string;
   status: string;

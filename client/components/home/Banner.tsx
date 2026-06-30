@@ -49,14 +49,17 @@ const MovieSlider: React.FC<{
         loop={false}
         className=" h-[320px] md:h-[500px] lg:h-[670px]"
       >
-        {movies.map((movie, index) => (
-          <SwiperSlide key={index}>
-            {({ isActive }) => (
-              <div className="relative w-full h-full overflow-hidden">
-         
+        {movies.map((movie, index) => {
+          const detailHref = `/phim/${movie.slug}`;
+          const playHref = movie.play_url || detailHref;
+
+          return (
+            <SwiperSlide key={index}>
+              {({ isActive }) => (
+                <div className="relative w-full h-full overflow-hidden">
                 <div  className="absolute inset-0 z-0 overflow-hidden">
 
-                  <Link href={`/phim/${movie.slug}`} className=" before:absolute  before:inset-0  before:bg-[url('/images/dotted.png')]  before:bg-repeat  before:opacity-20  before:z-10 before:content-['']"/>
+                  <Link href={detailHref} className=" before:absolute  before:inset-0  before:bg-[url('/images/dotted.png')]  before:bg-repeat  before:opacity-20  before:z-10 before:content-['']"/>
 
                   <div className={`absolute inset-0 
                       transition-transform duration-[500ms] ease-out ${isActive ? ' translate-x-0' : ' translate-x-[100px]'} `}>
@@ -132,7 +135,7 @@ const MovieSlider: React.FC<{
                       </p>
                       
                       <div className="pt-3 hidden items-center gap-4 lg:flex pointer-events-auto">
-                        <Link href={`/phim/${movie.slug}`} className="h-16 w-16 flex items-center justify-center bg-[linear-gradient(39deg,rgb(var(--primary)),rgb(var(--primary-light)/1))] rounded-full  transition-colors bg-white">
+                        <Link href={playHref} aria-label={`Xem ngay ${movie.name}`} className="h-16 w-16 flex items-center justify-center bg-[linear-gradient(39deg,rgb(var(--primary)),rgb(var(--primary-light)/1))] rounded-full  transition-colors bg-white">
                           <i className="fa-solid fa-play text-black text-2xl"></i>
                         </Link>
                       </div>
@@ -143,7 +146,8 @@ const MovieSlider: React.FC<{
               </div>
             )}
           </SwiperSlide>
-        ))}
+          );
+        })}
 
       </Swiper>
 
