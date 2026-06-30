@@ -73,6 +73,144 @@ function isAllowedPlayerOrigin(origin) {
 
 let lastPlayRequestKey = '';
 
+function isIosLike() {
+  const ua = navigator.userAgent || '';
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function canUseServiceWorkerDirectHls() {
+  const secureContext = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+  return secureContext
+    && !isIosLike()
+    && 'serviceWorker' in navigator
+    && 'MediaSource' in window
+    && 'DecompressionStream' in window;
+}
+
+function waitForServiceWorkerController(timeoutMs = 1500) {
+  if (navigator.serviceWorker.controller) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      resolve(value);
+    };
+    const onControllerChange = () => finish(true);
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    setTimeout(() => finish(Boolean(navigator.serviceWorker.controller)), timeoutMs);
+  });
+}
+
+async function ensureTikTokServiceWorker() {
+  window.__ropDirectHlsEligible = canUseServiceWorkerDirectHls();
+  window.__ropDirectHlsEnabled = false;
+  if (!window.__ropDirectHlsEligible) return false;
+
+  try {
+    const registration = await navigator.serviceWorker.register('/sw-tiktok-hls.js', { scope: '/' });
+    await registration.update().catch(() => {});
+    await navigator.serviceWorker.ready;
+    const controlled = await waitForServiceWorkerController();
+    window.__ropDirectHlsController = controlled;
+    return controlled;
+  } catch (error) {
+    window.__ropDirectHlsError = error?.message || 'Service Worker registration failed';
+    return false;
+  }
+}
+
+function appendQueryParams(src, params) {
+  try {
+    const url = new URL(src, location.href);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
+    });
+    return url.toString();
+  } catch (_) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, value);
+    });
+    const joiner = src.includes('?') ? '&' : '?';
+    return `${src}${joiner}${query.toString()}`;
+  }
+}
+
+function buildPlaybackPlaylist(serverPlaylist, value, useServiceWorkerDirect) {
+  return serverPlaylist.map((item) => {
+    const playlistItem = {
+      title: item.title,
+      image: item.image,
+      sources: item.sources.map((source) => ({
+        file: appendQueryParams(source.file, {
+          ct: value.ct,
+          iv: value.iv,
+          sw: useServiceWorkerDirect ? '1' : undefined,
+        }),
+        label: source.label,
+        type: 'hls',
+        default: source.default || false,
+      })),
+    };
+    const tracks = normalizeTracks(item.tracks);
+    if (tracks.length) playlistItem.tracks = tracks;
+    return playlistItem;
+  });
+}
+
+function setupJwPlaylistWithFallback(serverPlaylist, value, useServiceWorkerDirect) {
+  const player = jwplayer('player');
+  const proxyPlaylist = buildPlaybackPlaylist(serverPlaylist, value, false);
+  const directPlaylist = useServiceWorkerDirect ? buildPlaybackPlaylist(serverPlaylist, value, true) : proxyPlaylist;
+  let fallbackUsed = false;
+
+  try {
+    if (window.__ropDirectHlsFallbackHandler) {
+      player.off('error', window.__ropDirectHlsFallbackHandler);
+      player.off('setupError', window.__ropDirectHlsFallbackHandler);
+    }
+  } catch (_) {}
+  window.__ropDirectHlsFallbackHandler = null;
+
+  const setupPlaylist = (playlist, mode) => {
+    window.__ropDirectHlsEnabled = mode === 'direct';
+    window.__ropDirectHlsMode = mode;
+    player.setup(getJwPlayerConfig({ playlist }));
+    enhanceJwPlayer(player);
+  };
+
+  const fallbackToProxy = (error) => {
+    if (!useServiceWorkerDirect || fallbackUsed) return;
+    fallbackUsed = true;
+    const message = error?.message || error?.reason || error?.code || error?.type || 'unknown error';
+    window.__ropDirectHlsFallback = { at: Date.now(), message };
+    console.warn(`Direct HLS failed, falling back to proxy: ${message}`);
+    try {
+      player.off('error', fallbackToProxy);
+      player.off('setupError', fallbackToProxy);
+    } catch (_) {}
+    window.__ropDirectHlsFallbackHandler = null;
+    setupPlaylist(proxyPlaylist, 'proxy-fallback');
+  };
+
+  if (useServiceWorkerDirect) {
+    try {
+      window.__ropDirectHlsFallbackHandler = fallbackToProxy;
+      player.on('error', fallbackToProxy);
+      player.on('setupError', fallbackToProxy);
+    } catch (_) {}
+  }
+
+  try {
+    setupPlaylist(directPlaylist, useServiceWorkerDirect ? 'direct' : 'proxy');
+  } catch (error) {
+    if (!useServiceWorkerDirect) throw error;
+    fallbackToProxy(error);
+  }
+}
+
 function svgDataUri(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -146,14 +284,8 @@ function setupJwPlayer(src, title, tracks = []) {
 }
 
 async function rewriteTikTokPlaylistForServiceWorker(src) {
-  if (!navigator.serviceWorker) throw new Error('Browser does not support Service Worker');
-  const registration = await navigator.serviceWorker.register('/sw-tiktok-hls.js', { scope: '/' });
-  await navigator.serviceWorker.ready;
-  await registration.update().catch(() => {});
-  if (!navigator.serviceWorker.controller) {
-    location.reload();
-    return null;
-  }
+  const controlled = await ensureTikTokServiceWorker();
+  if (!controlled) throw new Error('Service Worker is not ready for direct HLS');
   const response = await fetch(src, { credentials: 'omit' });
   if (!response.ok) throw new Error(`Playlist HTTP ${response.status}`);
   const playlistUrl = new URL(src, location.href);
@@ -277,7 +409,7 @@ window.addEventListener('message', (event) => {
     type: 'GET',
     dataType: 'json',
     data: { slug: value.t, ct: value.ct, iv: value.iv, type: value.type },
-    success: function (payload) {
+    success: async function (payload) {
       if (payload.action === 'captcha') {
         lastPlayRequestKey = '';
         showPlayerError(payload.reason ? `Không tải được nguồn phát: ${payload.reason}` : 'Cần xác thực bảo mật để phát phim.');
@@ -287,19 +419,13 @@ window.addEventListener('message', (event) => {
         showPlayerError('Không tìm thấy nguồn phát cho tập này.');
         return;
       }
-      const playlist = payload.playlist.map((item) => {
-        const playlistItem = {
-          title: item.title,
-          image: item.image,
-          sources: item.sources.map((s) => ({ file: `${s.file}?ct=${value.ct}&iv=${value.iv}`, label: s.label, type: 'hls', default: s.default || false }))
-        };
-        const tracks = normalizeTracks(item.tracks);
-        if (tracks.length) playlistItem.tracks = tracks;
-        return playlistItem;
-      });
-      const player = jwplayer('player');
-      player.setup(getJwPlayerConfig({ playlist }));
-      enhanceJwPlayer(player);
+      try {
+        const useServiceWorkerDirect = await ensureTikTokServiceWorker();
+        setupJwPlaylistWithFallback(payload.playlist, value, useServiceWorkerDirect);
+      } catch (error) {
+        lastPlayRequestKey = '';
+        showPlayerError(error?.message || 'Could not initialize player.');
+      }
     },
     error: function (xhr) {
       lastPlayRequestKey = '';

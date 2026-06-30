@@ -140,8 +140,24 @@ class StreamController {
     return `${protocol}://${host}`;
   }
 
-  private proxyUrl(proxyBaseUrl: string, targetUrl: string): string {
-    return `${proxyBaseUrl}${encodeURIComponent(normalizeSourceUrl(targetUrl))}`;
+  private proxyUrl(proxyBaseUrl: string, targetUrl: string, query = ""): string {
+    return `${proxyBaseUrl}${encodeURIComponent(normalizeSourceUrl(targetUrl))}${query}`;
+  }
+
+  private shouldUseServiceWorkerDirect(req: Request): boolean {
+    return req.query.sw === "1" && process.env.STREAM_SW_DIRECT !== "false";
+  }
+
+  private hlsResourceUrl(
+    proxyBaseUrl: string,
+    targetUrl: string,
+    useServiceWorkerDirect: boolean
+  ): string {
+    const normalized = normalizeSourceUrl(targetUrl);
+    if (useServiceWorkerDirect && !this.isPlaylistUri(normalized)) {
+      return `/sw-hls/segment?url=${encodeURIComponent(normalized)}`;
+    }
+    return this.proxyUrl(proxyBaseUrl, normalized, useServiceWorkerDirect ? "?sw=1" : "");
   }
 
   private isPlaylistUri(uri: string): boolean {
@@ -164,8 +180,11 @@ class StreamController {
   private rewriteHlsManifest(
     manifest: string,
     playlistUrl: string,
-    proxyBaseUrl: string
+    proxyBaseUrl: string,
+    useServiceWorkerDirect = false
   ): string {
+    let nextUriIsPlaylist = false;
+
     return String(manifest)
       .split(/\r?\n/)
       .map((line) => {
@@ -184,14 +203,24 @@ class StreamController {
           });
         }
 
+        if (trimmed.startsWith("#EXT-X-STREAM-INF")) {
+          nextUriIsPlaylist = true;
+          return line;
+        }
+
         if (trimmed.startsWith("#")) return line;
 
         try {
           const absolute = /^https?:\/\//i.test(trimmed)
             ? trimmed
             : new URL(trimmed, playlistUrl).href;
-          return this.proxyUrl(proxyBaseUrl, absolute);
+          const forcePlaylistProxy = nextUriIsPlaylist;
+          nextUriIsPlaylist = false;
+          return forcePlaylistProxy
+            ? this.proxyUrl(proxyBaseUrl, absolute, useServiceWorkerDirect ? "?sw=1" : "")
+            : this.hlsResourceUrl(proxyBaseUrl, absolute, useServiceWorkerDirect);
         } catch {
+          nextUriIsPlaylist = false;
           return line;
         }
       })
@@ -252,11 +281,17 @@ class StreamController {
 
       const host = this.getRequestBaseUrl(req);
       const baseUrl = `${host}/stream/${encryptedToken}/seg/`;
+      const useServiceWorkerDirect = this.shouldUseServiceWorkerDirect(req);
 
       // Rewrite nội dung M3U8
       // Mẹo cho iPhone: Không thêm query param ?ct=&iv= vào link segment nữa
       // Để URL càng sạch càng tốt, tránh lỗi native player
-      const rewritten = this.rewriteHlsManifest(m3u8Response.data, sourceUrl, baseUrl);
+      const rewritten = this.rewriteHlsManifest(
+        m3u8Response.data,
+        sourceUrl,
+        baseUrl,
+        useServiceWorkerDirect
+      );
 
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl"); // MIME chuẩn Apple
       // VOD: master playlist ổn định, cache ngắn để đỡ round-trip lặp lại.
@@ -324,8 +359,14 @@ class StreamController {
 
          const host = this.getRequestBaseUrl(req);
          const baseUrl = `${host}/stream/${encryptedToken}/seg/`;
+         const useServiceWorkerDirect = this.shouldUseServiceWorkerDirect(req);
 
-         const rewritten = this.rewriteHlsManifest(response.data, originUrl, baseUrl);
+         const rewritten = this.rewriteHlsManifest(
+           response.data,
+           originUrl,
+           baseUrl,
+           useServiceWorkerDirect
+         );
 
          res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
          // VOD: manifest con ổn định, cache ngắn để đỡ round-trip lặp lại.
