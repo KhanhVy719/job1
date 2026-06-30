@@ -10,6 +10,7 @@ import cors from "cors";
 import compression from "compression";
 import routes from "./routes/web";
 import stream from "./routes/stream";
+import MetaController from "./app/controller/catalog/meta";
 
 import connectDB from "./utils/mongodb";
 
@@ -82,6 +83,9 @@ app.use(
 );
 
 app.use(cookieParser());
+app.set("view engine", "ejs");
+app.set("views", "./views");
+app.get("/", MetaController.index);
 // Cache static assets: đỡ revalidate mỗi lần load. Asset có hash nên để lâu được.
 app.use(express.static("public", { maxAge: "7d", etag: true }));
 app.use(express.urlencoded({ extended: true }));
@@ -89,9 +93,6 @@ app.use(express.json());
 
 app.use("/api/v1", routes);
 app.use("/", stream);
-
-app.set("view engine", "ejs");
-app.set("views", "./views");
 
 // Keep-alive timeouts > timeout của reverse proxy để tránh đứt kết nối reuse khi fan-out segment.
 httpServer.keepAliveTimeout = 65000;

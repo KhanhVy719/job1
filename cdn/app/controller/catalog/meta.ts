@@ -3,13 +3,32 @@ import Category from "../../model/Category";
 import Country from "../../model/Country";
 
 class MetaController {
-  static index = async (req: Request, res: Response) => {
-    const allowedPlayerOrigins = [
+  private static getAllowedPlayerOrigins = () => {
+    const defaults = [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
       "https://localhost:3000",
       "https://127.0.0.1:3000",
+      "https://phim.tranhungdaocfs.site",
     ];
+
+    const envOrigins = (
+      process.env.PLAYER_ALLOWED_ORIGINS ||
+      process.env.CORS_ORIGINS ||
+      process.env.ALLOWED_ORIGINS ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      ""
+    )
+      .split(",")
+      .map((origin) => origin.trim().replace(/\/$/, ""))
+      .filter(Boolean);
+
+    return Array.from(new Set([...defaults, ...envOrigins]));
+  };
+
+  static index = async (req: Request, res: Response) => {
+    const allowedPlayerOrigins = MetaController.getAllowedPlayerOrigins();
 
     return res.render("index", { allowedPlayerOrigins });
   };
@@ -29,12 +48,7 @@ class MetaController {
     try {
       const referer = req.headers.referer || "";
       const originHost = req.headers.host || "";
-      const WHITELISTED_ORIGINS = [
-        "http://localhost:3000",
-        "https://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://127.0.0.1:3000",
-      ];
+      const WHITELISTED_ORIGINS = MetaController.getAllowedPlayerOrigins();
 
       let isTrustedReferer = false;
 
