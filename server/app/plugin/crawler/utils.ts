@@ -32,14 +32,24 @@ export const saveState = (filePath: string, data: any) => {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 };
 
-// --- VIDSRC EMBED ---
-// Domain để qua env để dễ đổi khi VidSrc đổi domain (mặc định vidsrc.sbs).
-const VIDSRC_BASE = (process.env.VIDSRC_BASE || "https://vidsrc.sbs").replace(/\/+$/, "");
+// --- EMBED PROVIDER ---
+// Override with VIDSRC_*_URL_TEMPLATE or EMBED_*_URL_TEMPLATE when the provider changes.
+const VIDSRC_BASE = (process.env.VIDSRC_BASE || "").replace(/\/+$/, "");
+const MOVIE_EMBED_TEMPLATE =
+  process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
+  process.env.EMBED_MOVIE_URL_TEMPLATE ||
+  (VIDSRC_BASE
+    ? `${VIDSRC_BASE}/embed/movie/{tmdbId}`
+    : "https://cinesrc.st/embed/movie/{tmdbId}");
+const TV_EMBED_TEMPLATE =
+  process.env.VIDSRC_TV_URL_TEMPLATE ||
+  process.env.EMBED_TV_URL_TEMPLATE ||
+  (VIDSRC_BASE && !VIDSRC_BASE.includes("cinesrc.st")
+    ? `${VIDSRC_BASE}/embed/tv/{tmdbId}/{season}/{episode}`
+    : "https://cinesrc.st/embed/tv/{tmdbId}?s={season}&e={episode}");
 
 /**
- * Build link nhúng iframe VidSrc theo TMDB id.
- * - Phim lẻ:  https://vidsrc.sbs/embed/movie/{tmdbId}
- * - Phim bộ:  https://vidsrc.sbs/embed/tv/{tmdbId}/{season}/{episode}
+ * Build iframe embed URL from TMDB id.
  *
  * @param tmdbId   TMDB id của phim
  * @param type     "movie" | "tv" (mọi giá trị khác "movie" coi là tv)
@@ -53,10 +63,11 @@ export const buildVidSrcEmbed = (
   episode?: number
 ): string => {
   if (!tmdbId) return "";
-  if (type === "movie") {
-    return `${VIDSRC_BASE}/embed/movie/${tmdbId}`;
-  }
+  const template = type === "movie" ? MOVIE_EMBED_TEMPLATE : TV_EMBED_TEMPLATE;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;
-  return `${VIDSRC_BASE}/embed/tv/${tmdbId}/${s}/${e}`;
+  return template
+    .replace(/\{tmdbId\}|\{tmdb_id\}/g, encodeURIComponent(String(tmdbId)))
+    .replace(/\{season\}/g, encodeURIComponent(String(s)))
+    .replace(/\{episode\}/g, encodeURIComponent(String(e)));
 };

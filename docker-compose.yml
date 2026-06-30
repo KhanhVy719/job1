@@ -62,6 +62,8 @@ services:
       URL: "0.0.0.0"
       PORT: "8001"
       NODE_ENV: production
+      VIDSRC_MOVIE_URL_TEMPLATE: "https://cinesrc.st/embed/movie/{tmdbId}"
+      VIDSRC_TV_URL_TEMPLATE: "https://cinesrc.st/embed/tv/{tmdbId}?s={season}&e={episode}"
     depends_on:
       - ollama
     ports:
@@ -80,6 +82,8 @@ services:
       URL: "0.0.0.0"
       PORT: "8001"
       NODE_ENV: production
+      VIDSRC_MOVIE_URL_TEMPLATE: "https://cinesrc.st/embed/movie/{tmdbId}"
+      VIDSRC_TV_URL_TEMPLATE: "https://cinesrc.st/embed/tv/{tmdbId}?s={season}&e={episode}"
     ports:
       - "8002:8001"
     volumes:

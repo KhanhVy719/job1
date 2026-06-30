@@ -13,12 +13,54 @@ const buildVidSrcEmbed = (
   season?: number,
   episode?: number
 ): string => {
-  const base = (process.env.VIDSRC_BASE || "https://vidsrc.sbs").replace(/\/+$/, "");
   if (!tmdbId) return "";
-  if (type === "movie") return `${base}/embed/movie/${tmdbId}`;
+  const legacyBase = (process.env.VIDSRC_BASE || "").replace(/\/+$/, "");
+  const movieTemplate =
+    process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
+    process.env.EMBED_MOVIE_URL_TEMPLATE ||
+    (legacyBase
+      ? `${legacyBase}/embed/movie/{tmdbId}`
+      : "https://cinesrc.st/embed/movie/{tmdbId}");
+  const tvTemplate =
+    process.env.VIDSRC_TV_URL_TEMPLATE ||
+    process.env.EMBED_TV_URL_TEMPLATE ||
+    (legacyBase && !legacyBase.includes("cinesrc.st")
+      ? `${legacyBase}/embed/tv/{tmdbId}/{season}/{episode}`
+      : "https://cinesrc.st/embed/tv/{tmdbId}?s={season}&e={episode}");
+  const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;
-  return `${base}/embed/tv/${tmdbId}/${s}/${e}`;
+  return template
+    .replace(/\{tmdbId\}|\{tmdb_id\}/g, encodeURIComponent(String(tmdbId)))
+    .replace(/\{season\}/g, encodeURIComponent(String(s)))
+    .replace(/\{episode\}/g, encodeURIComponent(String(e)));
+};
+
+const AUTO_EMBED_HOSTS = [
+  "vidsrc.sbs",
+  "web.nxsha.app",
+  "cinesrc.st",
+  "zxcstream.xyz",
+  "vidlux.xyz",
+];
+
+const getHostname = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+const isAutoManagedEmbed = (url: string, expectedUrl: string): boolean => {
+  const host = getHostname(url);
+  if (!host) return false;
+  const expectedHost = getHostname(expectedUrl);
+  const extraHosts = (process.env.AUTO_EMBED_HOSTS || "")
+    .split(",")
+    .map((x) => x.trim().replace(/^www\./, "").toLowerCase())
+    .filter(Boolean);
+  return [expectedHost, ...AUTO_EMBED_HOSTS, ...extraHosts].includes(host);
 };
 
 class MovieController {
@@ -116,20 +158,31 @@ class MovieController {
           .status(404)
           .json({ status: false, message: "Tập phim không tồn tại" });
 
-      // Fallback cho dữ liệu cũ: nếu chưa backfill embed_url thì build từ TMDB id.
-      if (!episode.embed_url && movie.tmdb?.id) {
-        if (movie.type === "movie" || movie.tmdb?.type === "movie") {
-          episode.embed_url = buildVidSrcEmbed(movie.tmdb.id, "movie");
-        } else {
-          const season = await Season.findById(episode.season_id)
-            .select("season_number")
-            .lean();
-          episode.embed_url = buildVidSrcEmbed(
-            movie.tmdb.id,
-            "tv",
-            season?.season_number || 1,
-            episode.episode || 1
-          );
+      // Rebuild auto-provider embeds from current TMDB metadata; keep custom embeds.
+      if (movie.tmdb?.id) {
+        const isMovie = movie.type === "movie" || movie.tmdb?.type === "movie";
+        const season = isMovie
+          ? null
+          : await Season.findById(episode.season_id)
+              .select("season_number")
+              .lean();
+        const expectedEmbedUrl = buildVidSrcEmbed(
+          movie.tmdb.id,
+          isMovie ? "movie" : "tv",
+          season?.season_number || 1,
+          episode.episode || 1
+        );
+        if (
+          expectedEmbedUrl &&
+          (!episode.embed_url ||
+            (episode.embed_url !== expectedEmbedUrl &&
+              isAutoManagedEmbed(episode.embed_url, expectedEmbedUrl)))
+        ) {
+          episode.embed_url = expectedEmbedUrl;
+          Episode.updateOne(
+            { _id: episode._id },
+            { $set: { embed_url: expectedEmbedUrl } }
+          ).exec();
         }
       }
 
