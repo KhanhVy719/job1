@@ -8,6 +8,20 @@ import Season from "../../model/Season";
 import mongoose from "mongoose";
 
 class AdminController {
+  private async refreshMovieLocalVideoFlag(movieId: mongoose.Types.ObjectId | string) {
+    const hasLocalVideo = await Episode.exists({
+      movie_id: movieId,
+      "videos.0": { $exists: true },
+    });
+
+    await Movie.updateOne(
+      { _id: movieId },
+      { $set: { has_local_video: Boolean(hasLocalVideo) } }
+    );
+
+    return Boolean(hasLocalVideo);
+  }
+
   stats = async (_req: Request, res: Response) => {
     try {
       const [movies, episodes, uploadedEpisodes, users, categories, countries, seasons] = await Promise.all([
@@ -92,7 +106,10 @@ class AdminController {
         episodeId,
         { $set: { videos: [] } },
         { new: true }
-      ).select("_id name episode videos embed_url");
+      ).select("_id movie_id name episode videos embed_url");
+      if (episode) {
+        await this.refreshMovieLocalVideoFlag(String(episode.movie_id));
+      }
       if (!episode) return res.status(404).json({ status: false, message: "Không tìm thấy episode" });
       return res.json({ status: true, data: episode, message: "Đã xóa source tự host của tập" });
     } catch (error) {

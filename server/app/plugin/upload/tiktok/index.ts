@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import { pipeline } from "stream/promises";
 import TiktokService from "./services/TiktokService";
 import Episode, { VideoFormat } from "../../../model/Episode";
+import Movie from "../../../model/Movie";
 import ffmpeg from "fluent-ffmpeg";
 
 interface MulterRequest extends Request {
@@ -230,6 +231,10 @@ class UploadController {
         } as any);
         episode.types = Array.from(new Set([...(episode.types || []), videoType]));
         await episode.save();
+        await Movie.updateOne(
+          { _id: String(episode.movie_id) },
+          { $set: { has_local_video: true } }
+        );
         attachedEpisode = true;
       }
 

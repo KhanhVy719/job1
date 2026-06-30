@@ -1,6 +1,7 @@
 import Category from "../model/Category";
 import Country from "../model/Country";
 import Movie from "../model/Movie";
+import { publicMovieConstraint } from "./Shared/shared";
 
 export interface AICreativeSection {
   title: string;
@@ -391,8 +392,8 @@ Analyze the user's query. Return a JSON object with:
       if (orConditions.length === 0) return { items: [], totalItems: 0 };
 
       const query = {
+        ...publicMovieConstraint(),
         $or: orConditions,
-        thumb_url: { $ne: "" },
       };
 
       const skip = (page - 1) * limit;
