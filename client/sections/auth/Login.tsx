@@ -5,7 +5,6 @@ import { toast } from "react-hot-toast";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/router";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
-import { extractToken } from "@/utils/extractToken";
 
 type LoginForm = {
   account: string;
@@ -54,25 +53,26 @@ const LoginForm: React.FC<Props> = ({ onForgotPassword, closeAuth }) => {
   };
 
   return (
-    <div>
-      <div className="text-white text-lg font-medium">Đăng nhập</div>
-      <div className="flex items-center space-x-2 text-gray-400 text-sm my-4 ">
+    <div className="auth-form-shell">
+      <div className="auth-title text-white text-xl font-semibold">Đăng nhập</div>
+      <div className="auth-copy flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-400 text-sm my-4 ">
         <span>Nếu bạn chưa có tài khoản,</span>
         <button
-          className='text-primary open-register '
+          className='auth-link open-register '
+          type="button"
         >
           đăng ký ngay
         </button>
       </div>
-      <form onSubmit={handleSubmit(onSubmit)} className="pt-3">
-        <div className="relative w-full">
+      <form onSubmit={handleSubmit(onSubmit)} className="auth-form pt-3">
+        <div className="auth-field relative w-full">
           <input
             type="text"
             id="account"
             {...register("account", {
               required: "Email hoặc tên đăng nhập không được để trống",
             })}
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Email"
           />
           {errors.account && (
@@ -82,14 +82,14 @@ const LoginForm: React.FC<Props> = ({ onForgotPassword, closeAuth }) => {
           )}
         </div>
 
-        <div className="relative w-full mt-3">
+        <div className="auth-field relative w-full mt-3">
           <input
             type="password"
             id="password"
             {...register("password", {
               required: "Mật khẩu không được để trống",
             })}
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Mật khẩu"
           />
 
@@ -104,7 +104,7 @@ const LoginForm: React.FC<Props> = ({ onForgotPassword, closeAuth }) => {
 
         <button
           type="submit"
-          className="bg-primary text-black w-full px-4 py-3 mt-7 rounded-lg text-sm font-semibold"
+          className="auth-submit bg-primary text-black w-full px-4 py-3 mt-7 rounded-lg text-sm font-semibold"
         >
           Đăng nhập
         </button>

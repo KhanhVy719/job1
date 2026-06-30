@@ -4,23 +4,24 @@ import React from "react";
 
 const ResetPasswordForm: React.FC = () => {
   return (
-    <div>
-      <div className="text-white text-lg font-medium">Quên mật khẩu</div>
-      <div className="flex items-center space-x-2 text-gray-400 text-sm my-4 ">
+    <div className="auth-form-shell">
+      <div className="auth-title text-white text-xl font-semibold">Quên mật khẩu</div>
+      <div className="auth-copy flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-400 text-sm my-4 ">
         <span>Nếu bạn đã có tài khoản,</span>
         <button
-          className='text-primary open-register '
+          className='auth-link open-login '
+          type="button"
         >
           đăng nhập
         </button>
       </div>
-      <form className="pt-3">
-        <div className="relative w-full">
+      <form className="auth-form pt-3">
+        <div className="auth-field relative w-full">
           <input
             type="text"
             id="account"
 
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Email đăng ký"
           />
 
@@ -31,7 +32,7 @@ const ResetPasswordForm: React.FC = () => {
 
         <button
           type="submit"
-          className="bg-primary text-black w-full px-4 py-3 mt-7 rounded-lg text-sm font-semibold"
+          className="auth-submit bg-primary text-black w-full px-4 py-3 mt-7 rounded-lg text-sm font-semibold"
         >
           Gửi yêu cầu
         </button>

@@ -55,18 +55,19 @@ const Register: React.FC<Props> = ({ closeAuth }) => {
   };
 
   return (
-    <div>
-      <div className="text-white text-lg font-medium">Tạo tài khoản mới</div>
-      <div className="flex items-center space-x-2 text-gray-400 text-sm my-4 ">
+    <div className="auth-form-shell">
+      <div className="auth-title text-white text-xl font-semibold">Tạo tài khoản mới</div>
+      <div className="auth-copy flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-400 text-sm my-4 ">
         <span>Nếu bạn đã có tài khoản,</span>
         <button
-          className='text-primary open-login '
+          className='auth-link open-login '
+          type="button"
         >
           đăng nhập
         </button>
       </div>
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="relative w-full">
+      <form onSubmit={handleSubmit(onSubmit)} className="auth-form">
+        <div className="auth-field relative w-full">
           <input
             type="text"
             id="fullName"
@@ -74,25 +75,25 @@ const Register: React.FC<Props> = ({ closeAuth }) => {
             {...register("fullname", {
               required: "Họ tên không được để trống",
             })}
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Tên hiển thị"
           />
 
         </div>
 
-        <div className="relative w-full mt-3">
+        <div className="auth-field relative w-full mt-3">
           <input
             type="email"
             id="email"
             required
             {...register("email", { required: "Email không được để trống" })}
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Email"
           />
         </div>
 
 
-        <div className="relative w-full mt-3">
+        <div className="auth-field relative w-full mt-3">
           <input
             type="password"
             id="password"
@@ -100,14 +101,14 @@ const Register: React.FC<Props> = ({ closeAuth }) => {
             {...register("password", {
               required: "Mật khẩu không được để trống",
             })}
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Mật khẩu"
           />
 
         </div>
 
         {/* Nhập lại mật khẩu */}
-        <div className="relative w-full mt-3">
+        <div className="auth-field relative w-full mt-3">
           <input
             type="password"
             id="confirm_password"
@@ -115,7 +116,7 @@ const Register: React.FC<Props> = ({ closeAuth }) => {
             {...register("confirm_password", {
               required: "Mật khẩu xác nhận không được để trống",
             })}
-            className="  text-white w-full border  border-gray-700 rounded-md  px-4 py-3 text-sm  focus:outline-none focus:border-white bg-[#1E2545] placeholder:text-gray-500"
+            className="auth-input text-white w-full border border-gray-700 rounded-md px-4 py-3 text-sm focus:outline-none bg-[#1E2545] placeholder:text-gray-500"
             placeholder="Nhập lại mật khẩu"
           />
 
@@ -123,7 +124,7 @@ const Register: React.FC<Props> = ({ closeAuth }) => {
 
         <button
           type="submit"
-          className="bg-primary text-black w-full px-4 py-3 mt-7 rounded-lg text-sm font-semibold"
+          className="auth-submit bg-primary text-black w-full px-4 py-3 mt-7 rounded-lg text-sm font-semibold"
         >
           Đăng ký
         </button>
