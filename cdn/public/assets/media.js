@@ -213,6 +213,38 @@ function setupJwPlaylistWithFallback(serverPlaylist, value, useServiceWorkerDire
   }
 }
 
+function scheduleServiceWorkerReload(value) {
+  try {
+    const attempts = Number(sessionStorage.getItem('__ropSwReloadAttempts') || '0');
+    if (attempts >= 1) return false;
+    sessionStorage.setItem('__ropSwReloadAttempts', String(attempts + 1));
+    sessionStorage.setItem('__ropPendingPlayValue', JSON.stringify(value));
+    window.__ropDirectHlsReloading = true;
+    location.reload();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function clearServiceWorkerReloadState() {
+  try {
+    sessionStorage.removeItem('__ropSwReloadAttempts');
+    sessionStorage.removeItem('__ropPendingPlayValue');
+  } catch (_) {}
+}
+
+function consumePendingPlayValue() {
+  try {
+    const raw = sessionStorage.getItem('__ropPendingPlayValue');
+    if (!raw) return null;
+    sessionStorage.removeItem('__ropPendingPlayValue');
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
 function svgDataUri(svg) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -388,14 +420,17 @@ function setupDirectPreviewPlayer() {
   return true;
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupDirectPreviewPlayer);
-else setupDirectPreviewPlayer();
+function bootPlayerPage() {
+  const handledPreview = setupDirectPreviewPlayer();
+  if (handledPreview) return;
+  const pendingValue = consumePendingPlayValue();
+  if (pendingValue) setTimeout(() => handlePlayValue(pendingValue), 0);
+}
 
-window.addEventListener('message', (event) => {
-  if (!isAllowedPlayerOrigin(event.origin)) return;
-  const data = event.data;
-  if (!data || data.action !== 'play') return;
-  const value = data.value;
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootPlayerPage);
+else bootPlayerPage();
+
+function handlePlayValue(value) {
   if (!value?.t || !value?.ct || !value?.iv) return;
   if (typeof $ === 'undefined' || typeof jwplayer === 'undefined') {
     showPlayerError('Player chưa tải xong, vui lòng thử lại.');
@@ -423,6 +458,8 @@ window.addEventListener('message', (event) => {
       }
       try {
         const useServiceWorkerDirect = await ensureTikTokServiceWorker();
+        if (!useServiceWorkerDirect && window.__ropDirectHlsEligible && scheduleServiceWorkerReload(value)) return;
+        if (useServiceWorkerDirect) clearServiceWorkerReloadState();
         setupJwPlaylistWithFallback(payload.playlist, value, useServiceWorkerDirect);
       } catch (error) {
         lastPlayRequestKey = '';
@@ -434,4 +471,11 @@ window.addEventListener('message', (event) => {
       showPlayerError(xhr?.responseJSON?.message || 'Không tải được nguồn phát.');
     }
   });
+}
+
+window.addEventListener('message', (event) => {
+  if (!isAllowedPlayerOrigin(event.origin)) return;
+  const data = event.data;
+  if (!data || data.action !== 'play') return;
+  handlePlayValue(data.value);
 });
