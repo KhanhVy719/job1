@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { useRouter } from "next/router";
 
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Thumbs, Autoplay, EffectFade } from 'swiper/modules';
@@ -18,7 +17,6 @@ import 'swiper/css/effect-fade';
 const MovieSlider: React.FC<{
   movies: IMovie[];
 }> = ({ movies }) => {
-  const router = useRouter();
   const [thumbsSwiper, setThumbsSwiper] = useState<SwiperType | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -141,11 +139,16 @@ const MovieSlider: React.FC<{
                           href={playHref}
                           aria-label={`Xem ngay ${movie.name}`}
                           draggable={false}
-                          onPointerDown={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => {
+                            if (event.button !== 0) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            window.location.assign(playHref);
+                          }}
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            void router.push(playHref);
+                            window.location.assign(playHref);
                           }}
                           className="h-16 w-16 flex items-center justify-center bg-[linear-gradient(39deg,rgb(var(--primary)),rgb(var(--primary-light)/1))] rounded-full  transition-colors bg-white"
                         >
