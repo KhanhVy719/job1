@@ -11,6 +11,7 @@ import ReactGA from "react-ga4";
 import { useEffect } from "react";
 import { useRouter } from "next/router";
 import Script from "next/script";
+import ViewerLanguageTranslator from "@/components/ViewerLanguageTranslator";
 
 // Đổi GA chỉ cần set env NEXT_PUBLIC_GA_ID (rỗng = tắt tracking)
 const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID || "";
@@ -42,6 +43,7 @@ export default function MyApp(props: AppPropsWithLayout) {
     <>
       <DefaultSeo {...SEO} />
       <Toaster position="top-center" />
+      <ViewerLanguageTranslator />
       <AuthProvider>
           <AppContent {...props} />
       </AuthProvider>
