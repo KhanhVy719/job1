@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rophim-hls-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "routes": [
+    {
+      "pattern": "hls-proxy.peakfilm.net",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://peakfilm.net,https://flim.peakfilm.net",
+    "CACHE_PLAYLIST_TTL_SECONDS": "20",
+    "CACHE_SEGMENT_TTL_SECONDS": "86400",
+    "HLS_PROXY_UA": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "secrets": {
+    "required": ["HLS_PROXY_SECRET"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

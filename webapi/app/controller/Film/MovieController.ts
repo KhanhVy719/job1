@@ -23,6 +23,11 @@ const HLS_PROXY_SECRET =
   process.env.SECRET_KEY ||
   "rophim-hls-proxy";
 const HLS_PROXY_ENABLED = process.env.HLS_PROXY_ENABLED === "true";
+const HLS_PROXY_PUBLIC_URL = (
+  process.env.HLS_PROXY_PUBLIC_URL ||
+  process.env.HLS_PROXY_WORKER_URL ||
+  ""
+).replace(/[/?]+$/, "");
 
 const HLS_PROXY_UA =
   process.env.VSE_USER_AGENT ||
@@ -46,9 +51,12 @@ const timingSafeEqualString = (left: string, right: string) => {
 
 const buildHlsProxyPath = (url: string) => {
   const encoded = encodeHlsProxyUrl(url);
-  return `/api/v1/hls-proxy?u=${encodeURIComponent(encoded)}&s=${encodeURIComponent(
+  const query = `u=${encodeURIComponent(encoded)}&s=${encodeURIComponent(
     signHlsProxyUrl(url)
   )}`;
+  return HLS_PROXY_PUBLIC_URL
+    ? `${HLS_PROXY_PUBLIC_URL}?${query}`
+    : `/api/v1/hls-proxy?${query}`;
 };
 
 const toAbsoluteHlsUrl = (value: string, baseUrl: string) => {
