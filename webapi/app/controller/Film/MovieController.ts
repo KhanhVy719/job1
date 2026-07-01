@@ -12,7 +12,7 @@ interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
 
-const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vsembed.su").replace(/\/+$/, "");
+const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vidsrc-embed.ru").replace(/\/+$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
   "vidsrc.me",
   "vidsrc-embed.ru",
@@ -49,15 +49,22 @@ const normalizeManagedEmbedUrl = (
     if (!isVsembedHost) return parsed.toString();
 
     const normalizedTmdbId = encodeURIComponent(String(tmdbId));
+    const canonicalUrl = `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
     if (type === "movie" && parsed.pathname.includes("/embed/movie")) {
+      if (parsed.searchParams.has("tmdb") || parsed.searchParams.has("imdb")) {
+        return canonicalUrl;
+      }
       return `${VSEMBED_ORIGIN}/embed/movie/${normalizedTmdbId}`;
     }
     if (type !== "movie" && parsed.pathname.includes("/embed/tv")) {
+      if (parsed.searchParams.has("tmdb") || parsed.searchParams.has("imdb")) {
+        return canonicalUrl;
+      }
       const s = season && season > 0 ? season : 1;
       const e = episode && episode > 0 ? episode : 1;
       return `${VSEMBED_ORIGIN}/embed/tv/${normalizedTmdbId}/${s}-${e}`;
     }
-    return `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    return canonicalUrl;
   } catch {
     return url;
   }
@@ -74,11 +81,11 @@ const buildVidSrcEmbed = (
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
-    `${embedBase}/embed/movie/{tmdbId}`;
+    `${embedBase}/embed/movie?tmdb={tmdbId}`;
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
-    `${embedBase}/embed/tv/{tmdbId}/{season}-{episode}`;
+    `${embedBase}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`;
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;

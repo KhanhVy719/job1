@@ -134,7 +134,7 @@ interface EmbedServerOption {
   url: string;
 }
 
-const VSEMBED_ORIGIN = (process.env.NEXT_PUBLIC_VSEMBED_ORIGIN || "https://vsembed.su").replace(/\/$/, "");
+const VSEMBED_ORIGIN = (process.env.NEXT_PUBLIC_VSEMBED_ORIGIN || "https://vidsrc-embed.ru").replace(/\/$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
   "vidsrc.me",
   "vidsrc-embed.ru",
@@ -145,11 +145,36 @@ const VSEMBED_LEGACY_HOSTS = new Set([
   "vsembed.su",
 ]);
 
+const fillEmbedTemplate = (
+  template: string,
+  tmdbId: string,
+  season = 1,
+  episode = 1
+) =>
+  template
+    .replace(/\{tmdbId\}|\{tmdb_id\}/g, tmdbId)
+    .replace(/\{season\}/g, encodeURIComponent(String(season)))
+    .replace(/\{episode\}/g, encodeURIComponent(String(episode)));
+
 const buildVsembedMovieUrl = (tmdbId: string) =>
-  tmdbId ? `${VSEMBED_ORIGIN}/embed/movie/${tmdbId}` : "";
+  tmdbId
+    ? fillEmbedTemplate(
+        process.env.NEXT_PUBLIC_VIDSRC_MOVIE_URL_TEMPLATE ||
+          `${VSEMBED_ORIGIN}/embed/movie?tmdb={tmdbId}`,
+        tmdbId
+      )
+    : "";
 
 const buildVsembedTvUrl = (tmdbId: string, season: number, episode: number) =>
-  tmdbId ? `${VSEMBED_ORIGIN}/embed/tv/${tmdbId}/${season}-${episode}` : "";
+  tmdbId
+    ? fillEmbedTemplate(
+        process.env.NEXT_PUBLIC_VIDSRC_TV_URL_TEMPLATE ||
+          `${VSEMBED_ORIGIN}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`,
+        tmdbId,
+        season,
+        episode
+      )
+    : "";
 
 const EMBED_PROVIDERS = [
   {
