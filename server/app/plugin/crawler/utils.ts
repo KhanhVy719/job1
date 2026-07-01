@@ -39,14 +39,14 @@ const MOVIE_EMBED_TEMPLATE =
   process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
   process.env.EMBED_MOVIE_URL_TEMPLATE ||
   (VIDSRC_BASE
-    ? `${VIDSRC_BASE}/embed/movie?tmdb={tmdbId}`
-    : "https://vidsrc-embed.ru/embed/movie?tmdb={tmdbId}");
+    ? `${VIDSRC_BASE}/embed/movie/{tmdbId}`
+    : "https://vsembed.ru/embed/movie/{tmdbId}");
 const TV_EMBED_TEMPLATE =
   process.env.VIDSRC_TV_URL_TEMPLATE ||
   process.env.EMBED_TV_URL_TEMPLATE ||
   (VIDSRC_BASE
-    ? `${VIDSRC_BASE}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`
-    : "https://vidsrc-embed.ru/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}");
+    ? `${VIDSRC_BASE}/embed/tv/{tmdbId}/{season}-{episode}`
+    : "https://vsembed.ru/embed/tv/{tmdbId}/{season}-{episode}");
 
 /**
  * Build iframe embed URL from TMDB id.

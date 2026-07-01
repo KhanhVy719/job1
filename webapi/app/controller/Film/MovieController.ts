@@ -12,7 +12,7 @@ interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
 
-const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vidsrc-embed.ru").replace(/\/+$/, "");
+const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vsembed.ru").replace(/\/+$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
   "vidsrc.me",
   "vidsrc-embed.ru",
@@ -81,11 +81,11 @@ const buildVidSrcEmbed = (
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
-    `${embedBase}/embed/movie?tmdb={tmdbId}`;
+    `${embedBase}/embed/movie/{tmdbId}`;
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
-    `${embedBase}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`;
+    `${embedBase}/embed/tv/{tmdbId}/{season}-{episode}`;
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;

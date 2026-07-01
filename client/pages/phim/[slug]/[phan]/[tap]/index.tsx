@@ -134,7 +134,7 @@ interface EmbedServerOption {
   url: string;
 }
 
-const VSEMBED_ORIGIN = (process.env.NEXT_PUBLIC_VSEMBED_ORIGIN || "https://vidsrc-embed.ru").replace(/\/$/, "");
+const VSEMBED_ORIGIN = (process.env.NEXT_PUBLIC_VSEMBED_ORIGIN || "https://vsembed.ru").replace(/\/$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
   "vidsrc.me",
   "vidsrc-embed.ru",
@@ -160,7 +160,7 @@ const buildVsembedMovieUrl = (tmdbId: string) =>
   tmdbId
     ? fillEmbedTemplate(
         process.env.NEXT_PUBLIC_VIDSRC_MOVIE_URL_TEMPLATE ||
-          `${VSEMBED_ORIGIN}/embed/movie?tmdb={tmdbId}`,
+          `${VSEMBED_ORIGIN}/embed/movie/{tmdbId}`,
         tmdbId
       )
     : "";
@@ -169,7 +169,7 @@ const buildVsembedTvUrl = (tmdbId: string, season: number, episode: number) =>
   tmdbId
     ? fillEmbedTemplate(
         process.env.NEXT_PUBLIC_VIDSRC_TV_URL_TEMPLATE ||
-          `${VSEMBED_ORIGIN}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`,
+          `${VSEMBED_ORIGIN}/embed/tv/{tmdbId}/{season}-{episode}`,
         tmdbId,
         season,
         episode
