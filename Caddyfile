@@ -7,79 +7,130 @@
 	email admin@peakfilm.net
 }
 
-(client_cache_headers) {
-	@next_static path /_next/static/*
-	header @next_static >Cache-Control "public, max-age=31536000, immutable"
-	header @next_static -Set-Cookie
-
-	@public_assets path /favicon.ico /site.webmanifest /robots.txt /sitemap*.xml /images/* /events/* /gtag.js
-	header @public_assets >Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
-	header @public_assets -Set-Cookie
-}
-
-(admin_cache_headers) {
-	@next_static path /_next/static/*
-	header @next_static >Cache-Control "public, max-age=31536000, immutable"
-	header @next_static -Set-Cookie
-
-	@public_assets path /favicon.ico /site.webmanifest /robots.txt /sitemap*.xml /images/* /assets/* /app.js /app.html /style.min.css /c.css
-	header @public_assets >Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
-	header @public_assets -Set-Cookie
-}
-
-(api_no_store_headers) {
-	@api path /api/*
-	header @api >Cache-Control "no-store"
-}
-
 peakfilm.net {
 	encode zstd gzip
-	import client_cache_headers
 
 	@watch_page path_regexp watch_page ^/phim/[^/]+/[^/]+/[^/]+$
 	redir @watch_page https://flim.peakfilm.net{uri} 302
 
-	reverse_proxy client:3000
+	@next_static path /_next/static/*
+	handle @next_static {
+		reverse_proxy client:3000 {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+			header_down -Set-Cookie
+		}
+	}
+
+	@public_assets path_regexp public_assets ^/(favicon\.ico|site\.webmanifest|robots\.txt|sitemap(?:-\d+)?\.xml|images/.*|events/.*|gtag\.js)$
+	handle @public_assets {
+		reverse_proxy client:3000 {
+			header_down Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+			header_down -Set-Cookie
+		}
+	}
+
+	handle {
+		reverse_proxy client:3000
+	}
 }
 
 flim.peakfilm.net {
 	encode zstd gzip
-	import client_cache_headers
-	reverse_proxy client:3000
+
+	@next_static path /_next/static/*
+	handle @next_static {
+		reverse_proxy client:3000 {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+			header_down -Set-Cookie
+		}
+	}
+
+	@public_assets path_regexp public_assets ^/(favicon\.ico|site\.webmanifest|robots\.txt|sitemap(?:-\d+)?\.xml|images/.*|events/.*|gtag\.js)$
+	handle @public_assets {
+		reverse_proxy client:3000 {
+			header_down Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+			header_down -Set-Cookie
+		}
+	}
+
+	handle {
+		reverse_proxy client:3000
+	}
 }
 
 api.peakfilm.net {
 	encode zstd gzip
-	import api_no_store_headers
-	reverse_proxy webapi:8001
+	reverse_proxy webapi:8001 {
+		header_down Cache-Control "no-store"
+	}
 }
 
 cdn.peakfilm.net {
 	@player_static path /video.html /x.html /index.html /sw-tiktok-hls.js /assets/*
-	header @player_static >Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
-	header @player_static -Set-Cookie
+	handle @player_static {
+		reverse_proxy cdn:8001 {
+			header_down Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+			header_down -Set-Cookie
+		}
+	}
 
-	reverse_proxy cdn:8001 {
-		flush_interval -1
+	handle {
+		reverse_proxy cdn:8001 {
+			flush_interval -1
+		}
 	}
 }
 
 core.peakfilm.net {
 	encode zstd gzip
-	import api_no_store_headers
+
+	@core_api path /api/*
+	handle @core_api {
+		reverse_proxy server:8001 {
+			header_down Cache-Control "no-store"
+		}
+	}
 
 	@player_static path /video.html /index.html /player-icons.css /assets/*
-	header @player_static >Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
-	header @player_static -Set-Cookie
+	handle @player_static {
+		reverse_proxy server:8001 {
+			header_down Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+			header_down -Set-Cookie
+		}
+	}
 
 	@hls_segments path /stream/*/seg/*
-	header @hls_segments >Cache-Control "public, max-age=31536000, immutable"
+	handle @hls_segments {
+		reverse_proxy server:8001 {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+		}
+	}
 
-	reverse_proxy server:8001
+	handle {
+		reverse_proxy server:8001
+	}
 }
 
 adminpeakflim.peakfilm.net {
 	encode zstd gzip
-	import admin_cache_headers
-	reverse_proxy admin:3001
+
+	@next_static path /_next/static/*
+	handle @next_static {
+		reverse_proxy admin:3001 {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+			header_down -Set-Cookie
+		}
+	}
+
+	@public_assets path_regexp public_assets ^/(favicon\.ico|site\.webmanifest|robots\.txt|sitemap(?:-\d+)?\.xml|images/.*|assets/.*|app\.js|app\.html|style\.min\.css|c\.css)$
+	handle @public_assets {
+		reverse_proxy admin:3001 {
+			header_down Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+			header_down -Set-Cookie
+		}
+	}
+
+	handle {
+		reverse_proxy admin:3001
+	}
 }
