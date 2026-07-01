@@ -6,10 +6,10 @@ import { useState, useEffect } from "react";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Mousewheel, FreeMode } from "swiper/modules";
-import icon from "@/types/icon";
 import "swiper/css";
 import "swiper/css/free-mode";
 import Account from '@/components/Dropdown/Account'; 
+import ViewerLanguageSwitch from "@/components/ViewerLanguageSwitch";
 
 interface MenuItem {
     name: string;
@@ -255,13 +255,7 @@ const Navbar: React.FC<NavbarProps> = ({
                     </ul>
 
                     <div className="flex items-center space-x-6">
-                        <div className="flex items-center space-x-2">
-                            <icon.TV className="text-primary" width={36} height={36} fill="currentColor" />
-                            <div className="flex flex-col space-y-0.5">
-                                <span className="text-gray-300 text-xs">Tải ứng dụng</span>
-                                <span className="text-sm font-semibold text-white">RoPhim</span>
-                            </div>
-                        </div>
+                        <ViewerLanguageSwitch compact />
                         {user ? (
                             <>
                                 <Account user={user} Logout={Logout} vip={vip} />

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { FreeMode, Mousewheel } from "swiper/modules";
-import icon from "@/types/icon";
+import ViewerLanguageSwitch from "@/components/ViewerLanguageSwitch";
 import "swiper/css";
 import "swiper/css/free-mode";
 
@@ -41,13 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <button onClick={openLogin} className="py-2.5 w-full flex items-center space-x-2 justify-center font-medium text-black text-sm bg-white rounded-full">
           <i className="fa-solid fa-user"></i><span className="text-medium">Thành viên</span>
         </button>
-        <div className="mt-4 bg-[#fff1] rounded-xl p-2 flex items-center space-x-3">
-          <icon.TV className="text-primary" width={36} height={36} fill="currentColor" />
-          <div className="flex flex-col space-y-0.5">
-            <span className="text-gray-300 text-xs">Tải ứng dụng</span>
-            <span className="text-sm font-semibold text-white">RoPhim</span>
-          </div>
-        </div>
+        <ViewerLanguageSwitch className="mt-4" />
         <ul className="grid grid-cols-2 my-6 gap-6 relative">
           <li><Link href="/phim-le/" className="text-white hover:text-primary font-semibold text-[13px]">Phim Lẻ</Link></li>
           <li><Link href="/phim-bo/" className="text-white hover:text-primary font-semibold text-[13px]">Phim Bộ</Link></li>
