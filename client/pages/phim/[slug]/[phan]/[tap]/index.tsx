@@ -186,7 +186,9 @@ const EMBED_PROVIDERS = [
 ];
 
 const SELF_HOSTED_PLAYER_VERSION = "captcha-query-20260630-allow-origin";
-const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock";
+const SELF_HOSTED_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock";
+const EXTERNAL_EMBED_IFRAME_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-storage-access-by-user-activation";
 
 const getUrlOrigin = (url: string) => {
   try {
@@ -936,8 +938,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
               className="absolute top-0 left-0 w-full h-full"
               id="player"
               allow="fullscreen; autoplay; encrypted-media; picture-in-picture; web-share"
-              referrerPolicy={hasSelfHostedVideo ? "no-referrer" : "origin-when-cross-origin"}
-              sandbox={PLAYER_IFRAME_SANDBOX}
+              referrerPolicy="no-referrer"
+              sandbox={hasSelfHostedVideo ? SELF_HOSTED_IFRAME_SANDBOX : EXTERNAL_EMBED_IFRAME_SANDBOX}
               src={playerSrc}
               onLoad={() => setIframeLoaded(true)}
             />
