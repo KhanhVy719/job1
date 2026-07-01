@@ -155,6 +155,7 @@ const EMBED_PROVIDERS = [
 ];
 
 const SELF_HOSTED_PLAYER_VERSION = "captcha-query-20260630-allow-origin";
+const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock";
 
 const getUrlOrigin = (url: string) => {
   try {
@@ -886,6 +887,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
               id="player"
               allow="fullscreen; autoplay; encrypted-media; picture-in-picture; web-share"
               referrerPolicy={hasSelfHostedVideo ? "no-referrer" : "origin-when-cross-origin"}
+              sandbox={PLAYER_IFRAME_SANDBOX}
               allowFullScreen
               src={playerSrc}
               onLoad={() => setIframeLoaded(true)}
