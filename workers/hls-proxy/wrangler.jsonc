@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rophim-hls-proxy",
+  "account_id": "7dd3f24335c3f700e6948aa3aa7ffccb",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "routes": [

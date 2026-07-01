@@ -13,6 +13,9 @@ const EMBED_BASE = (
 const RCP_HOST = process.env.VSE_RCP_HOST || "cloudorchestranova.com";
 const TOKEN_TTL_MS = Number(process.env.VSE_TOKEN_TTL_MS) || 20_000;
 const TIMEOUT_MS = Number(process.env.VSE_TIMEOUT_MS) || 15_000;
+const DEFER_HLS_TOKEN =
+  !!(process.env.HLS_PROXY_PUBLIC_URL || process.env.HLS_PROXY_WORKER_URL) &&
+  process.env.HLS_PROXY_DEFER_TOKEN !== "false";
 
 type MediaType = "movie" | "tv";
 
@@ -87,7 +90,7 @@ class VseResolver {
         if (!directUrls.length) {
           return this.empty("no-prorcp", resolvedAt);
         }
-        const sources = await this.tokenize(directUrls);
+        const sources = await this.tokenize(directUrls, DEFER_HLS_TOKEN);
         return this.result(sources, [], undefined, resolvedAt);
       }
 
@@ -98,7 +101,7 @@ class VseResolver {
         return this.empty("no-master-urls", resolvedAt);
       }
 
-      const sources = await this.tokenize(rawUrls);
+      const sources = await this.tokenize(rawUrls, DEFER_HLS_TOKEN);
       const subtitles = this.parseSubtitles(prorcpHtml);
       const poster = this.parsePoster(prorcpHtml);
 
@@ -198,7 +201,7 @@ class VseResolver {
       .replace(/^['"]|['"]$/g, "");
   }
 
-  private async tokenize(rawUrls: string[]): Promise<VseSource[]> {
+  private async tokenize(rawUrls: string[], deferToken = false): Promise<VseSource[]> {
     const sources: VseSource[] = [];
 
     for (const rawUrl of rawUrls) {
@@ -214,7 +217,7 @@ class VseResolver {
       }
 
       let finalUrl = urlPart;
-      if (/__TOKEN(PG)?__/i.test(finalUrl)) {
+      if (!deferToken && /__TOKEN(PG)?__/i.test(finalUrl)) {
         const token = await this.getToken(host);
         if (!token) continue;
         finalUrl = finalUrl.replace(/__TOKENPG__|__TOKEN__/g, token);

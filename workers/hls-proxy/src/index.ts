@@ -8,6 +8,7 @@ interface Env {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 const allowedMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -180,6 +181,39 @@ function numericEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+async function getHostToken(host: string, env: Env): Promise<string> {
+  const cached = tokenCache.get(host);
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
+
+  const response = await fetch(`https://${host}/generate.php`, {
+    headers: {
+      "Accept": "*/*",
+      "Referer": `https://${host}/`,
+      "User-Agent": env.HLS_PROXY_UA || "Mozilla/5.0",
+    },
+    cf: { cacheTtl: 0 },
+  });
+
+  if (!response.ok) return "";
+
+  const token = (await response.text()).trim();
+  if (!token) return "";
+
+  tokenCache.set(host, {
+    token,
+    expiresAt: Date.now() + 20_000,
+  });
+  return token;
+}
+
+async function resolveTokenizedUrl(targetUrl: string, env: Env): Promise<string> {
+  if (!/__TOKEN(PG)?__/i.test(targetUrl)) return targetUrl;
+
+  const host = new URL(targetUrl).host;
+  const token = await getHostToken(host, env);
+  return token ? targetUrl.replace(/__TOKENPG__|__TOKEN__/g, token) : targetUrl;
+}
+
 async function handleProxy(request: Request, env: Env): Promise<Response> {
   if (!allowedMethods.has(request.method)) {
     return jsonResponse(request, env, 405, { status: false, message: "method not allowed" });
@@ -218,11 +252,12 @@ async function handleProxy(request: Request, env: Env): Promise<Response> {
   const range = request.headers.get("Range");
   if (range) upstreamHeaders.set("Range", range);
 
-  const cacheTtl = isPlaylistUrl(targetUrl)
+  const upstreamUrl = await resolveTokenizedUrl(targetUrl, env);
+  const cacheTtl = isPlaylistUrl(upstreamUrl)
     ? numericEnv(env.CACHE_PLAYLIST_TTL_SECONDS, 20)
     : numericEnv(env.CACHE_SEGMENT_TTL_SECONDS, 86_400);
 
-  const upstream = await fetch(targetUrl, {
+  const upstream = await fetch(upstreamUrl, {
     method: request.method,
     headers: upstreamHeaders,
     redirect: "follow",
@@ -231,7 +266,7 @@ async function handleProxy(request: Request, env: Env): Promise<Response> {
       : undefined,
   });
 
-  if (request.method === "HEAD" || !isPlaylistResponse(targetUrl, upstream)) {
+  if (request.method === "HEAD" || !isPlaylistResponse(upstreamUrl, upstream)) {
     return new Response(upstream.body, {
       status: upstream.status,
       headers: copyPassthroughHeaders(upstream, request, env),
@@ -239,7 +274,7 @@ async function handleProxy(request: Request, env: Env): Promise<Response> {
   }
 
   const playlist = await upstream.text();
-  const rewritten = await rewritePlaylist(playlist, targetUrl, proxyEndpoint(request), env);
+  const rewritten = await rewritePlaylist(playlist, upstreamUrl, proxyEndpoint(request), env);
   const headers = corsHeaders(request, env);
   headers.set("Content-Type", "application/vnd.apple.mpegurl");
   headers.set("Cache-Control", `public, max-age=${numericEnv(env.CACHE_PLAYLIST_TTL_SECONDS, 20)}`);
