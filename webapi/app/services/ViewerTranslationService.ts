@@ -135,6 +135,9 @@ const CATEGORY_NAMES: Record<ViewerLanguageCode, Record<string, string>> = {
     "phim-bo": "Series",
     "phim-chieu-rap": "Theatrical movies",
     "tv-shows": "TV shows",
+    "chuong-trinh-truyen-hinh": "TV shows",
+    "phim-truyen-hinh": "TV shows",
+    "truyen-hinh": "TV shows",
   },
   fil: {
     "phim-hanh-dong": "Aksyon",
@@ -170,7 +173,10 @@ const CATEGORY_NAMES: Record<ViewerLanguageCode, Record<string, string>> = {
     "phim-le": "Mga Pelikula",
     "phim-bo": "Mga Serye",
     "phim-chieu-rap": "Mga pelikulang pang-sinehan",
-    "tv-shows": "TV shows",
+    "tv-shows": "Mga Palabas sa TV",
+    "chuong-trinh-truyen-hinh": "Mga Palabas sa TV",
+    "phim-truyen-hinh": "Mga Palabas sa TV",
+    "truyen-hinh": "Mga Palabas sa TV",
   },
 };
 

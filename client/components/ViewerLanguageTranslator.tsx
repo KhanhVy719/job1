@@ -8,7 +8,8 @@ import {
 import { translateViewerText } from "@/utils/viewer-language-dictionary";
 
 const TRANSLATABLE_ATTRIBUTES = ["placeholder", "title", "aria-label", "alt"] as const;
-const SKIPPED_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "IFRAME", "TEXTAREA"]);
+const SKIPPED_TEXT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "IFRAME", "TEXTAREA"]);
+const SKIPPED_ATTRIBUTE_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"]);
 
 const originalText = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Map<string, string>>();
@@ -22,14 +23,23 @@ const getAttributeOriginals = (element: Element) => {
   return originals;
 };
 
-const shouldSkipElement = (element: Element | null) => {
+const isNoTranslateElement = (element: Element | null) => {
   if (!element) return true;
-  if (SKIPPED_TAGS.has(element.tagName)) return true;
   return Boolean(element.closest("[data-no-translate]"));
 };
 
+const shouldSkipTextElement = (element: Element | null) => {
+  if (isNoTranslateElement(element)) return true;
+  return Boolean(element && SKIPPED_TEXT_TAGS.has(element.tagName));
+};
+
+const shouldSkipAttributeElement = (element: Element | null) => {
+  if (isNoTranslateElement(element)) return true;
+  return Boolean(element && SKIPPED_ATTRIBUTE_TAGS.has(element.tagName));
+};
+
 const translateTextNode = (node: Text, language: ViewerLanguageCode) => {
-  if (shouldSkipElement(node.parentElement)) return;
+  if (shouldSkipTextElement(node.parentElement)) return;
 
   if (!originalText.has(node)) {
     originalText.set(node, node.nodeValue || "");
@@ -41,7 +51,7 @@ const translateTextNode = (node: Text, language: ViewerLanguageCode) => {
 };
 
 const translateElementAttributes = (element: Element, language: ViewerLanguageCode) => {
-  if (shouldSkipElement(element)) return;
+  if (shouldSkipAttributeElement(element)) return;
 
   const originals = getAttributeOriginals(element);
 
@@ -115,9 +125,9 @@ const ViewerLanguageTranslator: React.FC = () => {
         mutations.some((mutation) => {
           const target = mutation.target;
           return target instanceof Element
-            ? !shouldSkipElement(target)
+            ? !shouldSkipAttributeElement(target)
             : target.parentElement
-              ? !shouldSkipElement(target.parentElement)
+              ? !shouldSkipTextElement(target.parentElement)
               : false;
         })
       ) {
