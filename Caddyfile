@@ -1,23 +1,40 @@
-# Caddy reverse proxy cho RoPhim
-# Tự động cấp & gia hạn TLS (Let's Encrypt) cho từng domain.
-# Caddy tự xử lý WebSocket upgrade (Socket.io ở cdn/server) — không cần cấu hình thêm.
-#
-# DNS yêu cầu: 6 bản ghi A (hoặc AAAA) trỏ về IP công khai của VPS:
-#   peakfilm.net                   -> VPS
-#   flim.peakfilm.net              -> VPS
-#   api.peakfilm.net               -> VPS
-#   cdn.peakfilm.net               -> VPS
-#   core.peakfilm.net              -> VPS
-#   adminpeakflim.peakfilm.net     -> VPS
+# RoPhim public reverse proxy.
+# DNS must point these hosts to the VPS:
+# peakfilm.net, flim.peakfilm.net, api.peakfilm.net, cdn.peakfilm.net,
+# core.peakfilm.net, adminpeakflim.peakfilm.net
 
-# Email dùng cho Let's Encrypt (đổi nếu cần)
 {
 	email admin@peakfilm.net
 }
 
-# Site phim chính (client, Next.js)
+(client_cache_headers) {
+	@next_static path /_next/static/*
+	header @next_static Cache-Control "public, max-age=31536000, immutable"
+	header @next_static -Set-Cookie
+
+	@public_assets path /favicon.ico /site.webmanifest /robots.txt /sitemap*.xml /images/* /events/* /gtag.js
+	header @public_assets Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+	header @public_assets -Set-Cookie
+}
+
+(admin_cache_headers) {
+	@next_static path /_next/static/*
+	header @next_static Cache-Control "public, max-age=31536000, immutable"
+	header @next_static -Set-Cookie
+
+	@public_assets path /favicon.ico /site.webmanifest /robots.txt /sitemap*.xml /images/* /assets/* /app.js /app.html /style.min.css /c.css
+	header @public_assets Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+	header @public_assets -Set-Cookie
+}
+
+(api_no_store_headers) {
+	@api path /api/*
+	header @api Cache-Control "no-store"
+}
+
 peakfilm.net {
 	encode zstd gzip
+	import client_cache_headers
 
 	@watch_page path_regexp watch_page ^/phim/[^/]+/[^/]+/[^/]+$
 	redir @watch_page https://flim.peakfilm.net{uri} 302
@@ -25,33 +42,44 @@ peakfilm.net {
 	reverse_proxy client:3000
 }
 
-# Domain xem phim (client, Next.js)
 flim.peakfilm.net {
 	encode zstd gzip
+	import client_cache_headers
 	reverse_proxy client:3000
 }
 
-# Web API (webapi)
 api.peakfilm.net {
 	encode zstd gzip
+	import api_no_store_headers
 	reverse_proxy webapi:8001
 }
 
-# CDN / HLS streaming (cdn) — không nén video (HLS đã nén), tăng timeout cho stream
 cdn.peakfilm.net {
+	@player_static path /video.html /x.html /index.html /sw-tiktok-hls.js /assets/*
+	header @player_static Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+	header @player_static -Set-Cookie
+
 	reverse_proxy cdn:8001 {
 		flush_interval -1
 	}
 }
 
-# Core service (server)
 core.peakfilm.net {
 	encode zstd gzip
+	import api_no_store_headers
+
+	@player_static path /video.html /index.html /player-icons.css /assets/*
+	header @player_static Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+	header @player_static -Set-Cookie
+
+	@hls_segments path /stream/*/seg/*
+	header @hls_segments Cache-Control "public, max-age=31536000, immutable"
+
 	reverse_proxy server:8001
 }
 
-# Admin dashboard (admin, Next.js)
 adminpeakflim.peakfilm.net {
 	encode zstd gzip
+	import admin_cache_headers
 	reverse_proxy admin:3001
 }

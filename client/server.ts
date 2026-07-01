@@ -28,6 +28,19 @@ const PUBLIC_ASSET_ALLOWLIST = [
   /^\/gtag\.js$/,
 ];
 
+const CACHEABLE_PUBLIC_EXTENSIONS = [
+  '.avif', '.css', '.gif', '.ico', '.jpg', '.jpeg', '.js', '.json', '.png',
+  '.svg', '.webp', '.woff', '.woff2', '.xml'
+];
+
+const isNextAssetPath = (path: string) =>
+  path.startsWith('/_next/') || path.startsWith('/static/');
+
+const isCacheablePublicAssetPath = (path: string) =>
+  isNextAssetPath(path) ||
+  PUBLIC_ASSET_ALLOWLIST.some((pattern) => pattern.test(path)) ||
+  CACHEABLE_PUBLIC_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext));
+
 // Origin nội bộ (dev) luôn được phép. Thêm domain production qua env CORS_ORIGINS
 // (danh sách phân tách bằng dấu phẩy), ví dụ: CORS_ORIGINS=https://rophim.example
 const defaultOrigins = [
@@ -81,7 +94,7 @@ app.prepare().then(() => {
     }
 
     // 1. Bỏ qua file hệ thống Next.js
-    if (path.startsWith('/_next/') || path.startsWith('/static/')) {
+    if (isNextAssetPath(path)) {
       return next();
     }
 
@@ -144,6 +157,10 @@ app.prepare().then(() => {
   });
 
   server.use((req, res, next) => {
+    if ((req.method === 'GET' || req.method === 'HEAD') && isCacheablePublicAssetPath(req.path)) {
+      return next();
+    }
+
     csrfMiddleware(req, res, next);
   });
 

@@ -21,7 +21,7 @@
     "dev": "dotenv -e .env -- cross-env NODE_ENV=development tsx server.ts",
     "obfuscate-build": "next-css-obfuscator",
     "build": "next build ",
-    "start": "dotenv -e .env -- dotenv -e .env -- cross-env NODE_ENV=production npx tsx watch server.ts",
+    "start": "dotenv -e .env -- dotenv -e .env -- cross-env NODE_ENV=production npx tsx server.ts",
     "lint": "next lint",
     "postbuild": "next-sitemap --config next-sitemap.config.cjs"
   },
