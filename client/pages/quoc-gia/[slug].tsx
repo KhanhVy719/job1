@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import dynamic from "next/dynamic";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { getViewerLanguageRequestHeaders } from "@/utils/viewer-language";
 import { useRouter } from "next/router";
 import { GetServerSideProps } from 'next';
 import { NextSeo } from 'next-seo';
@@ -448,11 +449,17 @@ export const getServerSideProps: GetServerSideProps<QuocGiaProps> = async (conte
 
   const countrySlug = routeParams?.slug as string;
   const currentPage = Number(query.trang) || 1;
+  const cookieHeader = req.headers.cookie || "";
+  const headers = {
+    Cookie: cookieHeader,
+    "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+    ...getViewerLanguageRequestHeaders(cookieHeader),
+  };
 
   let countryCode: string = "ALL";
 
   try {
-    const countryRes = await axiosInstance.get(API_ENDPOINTS.menu.countries);
+    const countryRes = await axiosInstance.get(API_ENDPOINTS.menu.countries, { headers });
     if (countryRes.data?.status && Array.isArray(countryRes.data.data)) {
         const countriesList = countryRes.data.data;
         if (countrySlug) {
@@ -509,13 +516,6 @@ export const getServerSideProps: GetServerSideProps<QuocGiaProps> = async (conte
   };
 
   try {
-       const cookieHeader = req.headers.cookie || "";
-
-    const headers = {
-      Cookie: cookieHeader,
-      "User-Agent": req.headers["user-agent"] || "NextJS-Server",
-    };
-
     const response = await axiosInstance.get(API_ENDPOINTS.search, {
       params: apiParams,
       headers:headers

@@ -9,6 +9,7 @@ import { NextSeo, VideoJsonLd } from 'next-seo';
 import clsx from "clsx";
 
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { getViewerLanguageRequestHeaders } from "@/utils/viewer-language";
 import { useAccountMovieActions } from "@/hooks/useAccountMovieActions";
 import { Encrypt } from "@/utils/crypto/fly";
 import { create } from "@/utils/crypto/fly2";
@@ -1148,6 +1149,7 @@ export const getServerSideProps: GetServerSideProps = withEncryptedProps(async (
     const apiHeaders = {
       Cookie: req.headers.cookie || "",
       "User-Agent": userAgent,
+      ...getViewerLanguageRequestHeaders(req.headers.cookie || ""),
     };
 
     const resDetail = await axiosInstance.get(API_ENDPOINTS.movie.detail(slug), {

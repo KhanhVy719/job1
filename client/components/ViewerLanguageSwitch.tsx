@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getCookieViewerLanguage,
   getViewerLanguage,
+  normalizeViewerLanguageCode,
   persistViewerLanguage,
   VIEWER_LANGUAGE_STORAGE_KEY,
   VIEWER_LANGUAGES,
@@ -39,8 +40,19 @@ const ViewerLanguageSwitch: React.FC<ViewerLanguageSwitchProps> = ({
   }, [router]);
 
   useEffect(() => {
-    const storedLanguage = localStorage.getItem(VIEWER_LANGUAGE_STORAGE_KEY) || getCookieViewerLanguage();
-    applyLanguage(storedLanguage || "en", false);
+    const storedLanguage = normalizeViewerLanguageCode(localStorage.getItem(VIEWER_LANGUAGE_STORAGE_KEY));
+    const cookieLanguage = normalizeViewerLanguageCode(getCookieViewerLanguage());
+    const initialLanguage = getViewerLanguage(storedLanguage || cookieLanguage || "en");
+
+    applyLanguage(initialLanguage.code, false);
+
+    if (storedLanguage && storedLanguage !== cookieLanguage) {
+      persistViewerLanguage(storedLanguage);
+      window.dispatchEvent(
+        new CustomEvent("rophim:viewer-language-change", { detail: initialLanguage })
+      );
+      void router.replace(router.asPath, undefined, { scroll: false });
+    }
 
     const handleLanguageChange = (event: Event) => {
       const code = (event as CustomEvent<{ code?: string }>).detail?.code;
@@ -58,7 +70,7 @@ const ViewerLanguageSwitch: React.FC<ViewerLanguageSwitchProps> = ({
       window.removeEventListener("rophim:viewer-language-change", handleLanguageChange);
       window.removeEventListener("storage", handleStorageChange);
     };
-  }, [applyLanguage]);
+  }, [applyLanguage, router]);
 
   return (
     <div

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from "next/dynamic";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { getViewerLanguageRequestHeaders } from "@/utils/viewer-language";
 import { useRouter } from "next/router";
 import { GetServerSideProps } from 'next';
 import { NextSeo } from 'next-seo';
@@ -418,6 +419,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const headers = {
       Cookie: cookieHeader,
       "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+      ...getViewerLanguageRequestHeaders(cookieHeader),
     };
     const response = await axiosInstance.get(API_ENDPOINTS.search, {
       params: apiParams,

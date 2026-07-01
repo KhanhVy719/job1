@@ -12,6 +12,7 @@ import CommentItems from "@/sections/film/Comment";
 import RatedItems from "@/sections/film/Rated";
 import ActorList from "@/components/Actor/FilmList";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { getViewerLanguageRequestHeaders } from "@/utils/viewer-language";
 import { useAccountMovieActions } from "@/hooks/useAccountMovieActions";
 import styles from './styles.module.css';
 import LoadingOverlay from "@/components/loading/loader";
@@ -948,6 +949,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const headers = {
       Cookie: cookieHeader,
       "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+      ...getViewerLanguageRequestHeaders(cookieHeader),
     };
 
     const resDetail = await axiosInstance.get(API_ENDPOINTS.movie.detail(slug), { headers: headers });

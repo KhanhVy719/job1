@@ -7,6 +7,7 @@ import styles from './styles.module.css';
 import { useRouter } from "next/router";
 import { GetServerSideProps } from 'next';
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { getViewerLanguageRequestHeaders } from "@/utils/viewer-language";
 import { GRADIENTS } from '@/utils/Items';
 import { useSearchFilters } from "@/hooks/useSearch";
 
@@ -194,10 +195,10 @@ export const getServerSideProps: GetServerSideProps<{
       headers: {
         Cookie: req.headers.cookie || "",
         "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+        ...getViewerLanguageRequestHeaders(req.headers.cookie || ""),
       },
     });
 
-console.log(API_ENDPOINTS.search,apiParams)
     if (response.data.status && response.data.data) {
       return {
         props: {

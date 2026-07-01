@@ -3,6 +3,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { GetServerSideProps } from "next";
 import axiosInstance, { API_ENDPOINTS } from "@/utils/axios";
+import { getViewerLanguageRequestHeaders } from "@/utils/viewer-language";
 import Loader from "@/components/loading/list";
 import ICON from "@/types/icon"; 
 import { GRADIENTS } from "@/utils/Items";
@@ -377,6 +378,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     headers: {
       Cookie: cookieHeader, 
       "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+      ...getViewerLanguageRequestHeaders(cookieHeader),
     }
   };
 
