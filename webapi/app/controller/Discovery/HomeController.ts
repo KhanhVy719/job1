@@ -332,7 +332,8 @@ class HomeController {
       ]);
       const sliderWithPlayUrls = await ViewerTranslationService.localizeMovies(
         await this._attachFirstPlayUrls(slider),
-        viewerLanguage
+        viewerLanguage,
+        { hydrate: true }
       );
 
       const validSections = sectionsRaw.filter(
