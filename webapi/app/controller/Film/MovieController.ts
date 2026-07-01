@@ -12,18 +12,60 @@ interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
 
+const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vsembed.su").replace(/\/+$/, "");
+const VSEMBED_LEGACY_HOSTS = new Set([
+  "vidsrc-embed.ru",
+  "vidsrc-embed.su",
+  "vidsrcme.su",
+  "vsrc.su",
+  "vsembed.ru",
+  "vsembed.su",
+]);
+
+const normalizeEmbedBase = (base: string): string => {
+  try {
+    const parsed = new URL(base);
+    if (VSEMBED_LEGACY_HOSTS.has(parsed.hostname.replace(/^www\./, "").toLowerCase())) {
+      return VSEMBED_ORIGIN;
+    }
+  } catch {
+    return VSEMBED_ORIGIN;
+  }
+  return base.replace(/\/+$/, "");
+};
+
+const normalizeManagedEmbedUrl = (url: string, type: string, imdbId?: string): string => {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    const isVsembedHost = VSEMBED_LEGACY_HOSTS.has(host);
+    if (!isVsembedHost) return parsed.toString();
+
+    if (type === "movie" && imdbId && parsed.pathname.includes("/embed/movie")) {
+      return `${VSEMBED_ORIGIN}/embed/movie?imdb=${encodeURIComponent(imdbId)}`;
+    }
+    return `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return url;
+  }
+};
+
 const buildVidSrcEmbed = (
   tmdbId: string | number,
   type: string,
   season?: number,
-  episode?: number
+  episode?: number,
+  imdbId?: string
 ): string => {
-  if (!tmdbId) return "";
-  const embedBase = (process.env.VIDSRC_BASE || "https://vidsrc-embed.ru").replace(/\/+$/, "");
+  const normalizedImdbId = imdbId?.trim();
+  if (!tmdbId && !normalizedImdbId) return "";
+  const embedBase = normalizeEmbedBase(process.env.VIDSRC_BASE || VSEMBED_ORIGIN);
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
-    `${embedBase}/embed/movie?tmdb={tmdbId}`;
+    (normalizedImdbId
+      ? `${embedBase}/embed/movie?imdb={imdbId}`
+      : `${embedBase}/embed/movie?tmdb={tmdbId}`);
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
@@ -31,10 +73,12 @@ const buildVidSrcEmbed = (
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;
-  return template
+  const embedUrl = template
     .replace(/\{tmdbId\}|\{tmdb_id\}/g, encodeURIComponent(String(tmdbId)))
+    .replace(/\{imdbId\}|\{imdb_id\}/g, encodeURIComponent(String(normalizedImdbId || "")))
     .replace(/\{season\}/g, encodeURIComponent(String(s)))
     .replace(/\{episode\}/g, encodeURIComponent(String(e)));
+  return normalizeManagedEmbedUrl(embedUrl, type, normalizedImdbId);
 };
 
 const AUTO_EMBED_HOSTS = [
@@ -161,7 +205,7 @@ class MovieController {
         slug: movieSlug,
         ...publicPlayableMovieConstraint(),
       })
-        .select("_id type tmdb zxc")
+        .select("_id type tmdb imdb zxc")
         .lean();
       if (!movie)
         return res
@@ -189,7 +233,8 @@ class MovieController {
           movie.tmdb.id,
           isMovie ? "movie" : "tv",
           season?.season_number || 1,
-          episode.episode || 1
+          episode.episode || 1,
+          movie.imdb?.id
         );
         if (
           expectedEmbedUrl &&
