@@ -102,7 +102,7 @@ class UploadJobQueue {
   }
 
   public async list(limit = 50) {
-    return UploadJob.find({})
+    return UploadJob.find({ status: { $ne: "canceled" } })
       .sort({ createdAt: -1 })
       .limit(Math.max(1, Math.min(100, limit)))
       .lean();
@@ -112,28 +112,20 @@ class UploadJobQueue {
     const job = await UploadJob.findOne({ job_id: jobId });
     if (!job) return null;
 
-    if (job.status === "success" || job.status === "error" || job.status === "canceled") {
+    if (job.status === "success" || job.status === "error") {
       return job;
     }
 
-    this.cancelRequested.add(jobId);
+    this.rememberCancelRequest(jobId);
 
-    if (job.status === "queued") {
-      job.status = "canceled";
-      job.phase = "canceled";
-      job.progress = 0;
-      job.message = "Canceled before processing";
-      job.cancel_requested = true;
-      job.finishedAt = new Date();
-      await job.save();
+    if (job.status === "queued" || job.status === "canceled") {
       await this.cleanupFile(job.file_path);
-      return job;
+      await UploadJob.deleteOne({ job_id: jobId });
+      return { job_id: jobId, status: "canceled", deleted: true };
     }
 
-    job.cancel_requested = true;
-    job.message = "Cancel requested. Stopping current step...";
-    await job.save();
-    return job;
+    await UploadJob.deleteOne({ job_id: jobId });
+    return { job_id: jobId, status: "canceled", deleted: true };
   }
 
   private async waitForDbAndResume() {
@@ -157,6 +149,7 @@ class UploadJobQueue {
         },
       }
     );
+    await UploadJob.deleteMany({ status: "canceled" });
 
     void this.pump();
   }
@@ -673,6 +666,14 @@ class UploadJobQueue {
     if (this.cancelRequested.has(jobId)) {
       throw new Error(CANCELED_ERROR);
     }
+  }
+
+  private rememberCancelRequest(jobId: string) {
+    this.cancelRequested.add(jobId);
+    const cleanupTimer = setTimeout(() => {
+      this.cancelRequested.delete(jobId);
+    }, 5 * 60 * 1000);
+    cleanupTimer.unref?.();
   }
 
   private startCancelPoll(jobId: string) {

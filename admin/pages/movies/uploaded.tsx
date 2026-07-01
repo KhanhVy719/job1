@@ -110,7 +110,9 @@ export default function UploadedMoviesPage() {
   const loadJobs = () => {
     axiosInstance.get(API_ENDPOINTS.uploadJobs, { params: { limit: 50 } })
       .then((res) => {
-        const nextJobs: UploadJob[] = res.data?.data || [];
+        const nextJobs: UploadJob[] = (res.data?.data || []).filter(
+          (job: UploadJob) => job.status !== "canceled"
+        );
         setJobs((prevJobs) => {
           const previouslyActive = new Set(
             prevJobs.filter(isActiveUploadJob).map((job) => job.job_id)
@@ -127,8 +129,14 @@ export default function UploadedMoviesPage() {
 
   const cancelJob = async (job: UploadJob) => {
     if (!confirm(`Hủy job upload "${job.original_name || job.job_id}"?`)) return;
-    await axiosInstance.post(API_ENDPOINTS.cancelUploadJob(job.job_id));
-    loadJobs();
+    setJobs((prevJobs) => prevJobs.filter((item) => item.job_id !== job.job_id));
+    try {
+      await axiosInstance.post(API_ENDPOINTS.cancelUploadJob(job.job_id));
+      loadJobs();
+    } catch (error) {
+      console.error("Cancel upload job failed", error);
+      loadJobs();
+    }
   };
 
   const jobStatusLabel = (status: UploadJob["status"]) => {
