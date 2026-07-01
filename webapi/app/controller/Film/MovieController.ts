@@ -22,6 +22,7 @@ const HLS_PROXY_SECRET =
   process.env.JWT_SECRET ||
   process.env.SECRET_KEY ||
   "rophim-hls-proxy";
+const HLS_PROXY_ENABLED = process.env.HLS_PROXY_ENABLED === "true";
 
 const HLS_PROXY_UA =
   process.env.VSE_USER_AGENT ||
@@ -463,7 +464,9 @@ class MovieController {
           source: "vsembed",
           sources: resolved.sources.map((source) => ({
             ...source,
-            proxy_url: buildHlsProxyPath(source.url),
+            ...(HLS_PROXY_ENABLED
+              ? { proxy_url: buildHlsProxyPath(source.url) }
+              : {}),
           })),
           subtitles: [...dbSubtitles, ...resolved.subtitles],
           poster: resolved.poster,
@@ -481,11 +484,18 @@ class MovieController {
   };
 
   static optionsHlsProxy = async (_req: Request, res: Response) => {
+    if (!HLS_PROXY_ENABLED) {
+      return res.status(404).end();
+    }
     setHlsProxyCors(res);
     return res.status(204).end();
   };
 
   static proxyHls = async (req: Request, res: Response) => {
+    if (!HLS_PROXY_ENABLED) {
+      return res.status(404).send("hls proxy disabled");
+    }
+
     setHlsProxyCors(res);
 
     try {
