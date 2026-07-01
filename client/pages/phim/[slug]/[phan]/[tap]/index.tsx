@@ -135,11 +135,11 @@ interface EmbedServerOption {
 
 const EMBED_PROVIDERS = [
   {
-    id: "zxc",
-    label: "ZXC",
-    movie: (tmdbId: string) => `https://zxcstream.xyz/player/movie/${tmdbId}`,
+    id: "vsembed",
+    label: "VSEmbed",
+    movie: (tmdbId: string) => `https://vsembed.su/embed/movie?tmdb=${tmdbId}`,
     tv: (tmdbId: string, season: number, episode: number) =>
-      `https://zxcstream.xyz/player/tv/${tmdbId}/${season}/${episode}/en`,
+      `https://vsembed.su/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
   },
 ];
 
@@ -645,7 +645,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
       }
     } catch {
       lastPlaybackRequestRef.current = "";
-      setSourceError("Nguồn phát chưa được xác minh hoặc không có trên ZXC.");
+      setSourceError("Nguồn phát chưa sẵn sàng hoặc không có trên VSEmbed.");
     }
   }, [slug, serverIndex, type, currentType, dynamicData]);
 

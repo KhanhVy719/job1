@@ -29,23 +29,7 @@ export const VALID_IMAGE_CONSTRAINT = {
   poster_url: { $ne: "" },
 };
 
-export const isZxcVerifiedRequired = () =>
-  process.env.REQUIRE_ZXC_VERIFIED === "true";
-
-export const ZXC_AVAILABLE_CONSTRAINT = {
-  "zxc.status": "available",
-};
-
-export const LOCAL_VIDEO_AVAILABLE_CONSTRAINT = {
-  has_local_video: true,
-};
-
-export const PLAYABLE_MOVIE_CONSTRAINT = {
-  $or: [ZXC_AVAILABLE_CONSTRAINT, LOCAL_VIDEO_AVAILABLE_CONSTRAINT],
-};
-
-export const publicPlayableMovieConstraint = () =>
-  isZxcVerifiedRequired() ? { $and: [PLAYABLE_MOVIE_CONSTRAINT] } : {};
+export const publicPlayableMovieConstraint = () => ({});
 
 export const publicMovieConstraint = () => ({
   ...VALID_IMAGE_CONSTRAINT,

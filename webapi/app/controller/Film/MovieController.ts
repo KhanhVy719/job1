@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
 import mongoose, { LeanDocument } from "mongoose";
 import Movie from "../../model/Movie";
-import Episode, { IEpisode, IVideoResource } from "../../model/Episode";
+import Episode, { IEpisode } from "../../model/Episode";
 import Season from "../../model/Season";
 import {
-  isZxcVerifiedRequired,
   publicMovieConstraint,
   publicPlayableMovieConstraint,
 } from "../Shared/shared";
@@ -19,15 +18,15 @@ const buildVidSrcEmbed = (
   episode?: number
 ): string => {
   if (!tmdbId) return "";
-  const zxcBase = (process.env.ZXC_BASE || "https://zxcstream.xyz").replace(/\/+$/, "");
+  const embedBase = (process.env.VIDSRC_BASE || "https://vsembed.su").replace(/\/+$/, "");
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
-    `${zxcBase}/player/movie/{tmdbId}`;
+    `${embedBase}/embed/movie?tmdb={tmdbId}`;
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
-    `${zxcBase}/player/tv/{tmdbId}/{season}/{episode}`;
+    `${embedBase}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`;
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;
@@ -43,6 +42,11 @@ const AUTO_EMBED_HOSTS = [
   "cinesrc.st",
   "zxcstream.xyz",
   "vidlux.xyz",
+  "vsembed.su",
+  "vidsrc-embed.ru",
+  "vidsrc-embed.su",
+  "vidsrcme.su",
+  "vsrc.su",
 ];
 
 const getHostname = (url: string): string => {
@@ -164,21 +168,6 @@ class MovieController {
         return res
           .status(404)
           .json({ status: false, message: "Tập phim không tồn tại" });
-
-      if (isZxcVerifiedRequired()) {
-        const hasLocalVideos =
-          Array.isArray(episode.videos) &&
-          episode.videos.some((video: IVideoResource) => Boolean(video?.url));
-        const hasVerifiedZxc =
-          episode.zxc?.status === "available" ||
-          movie.zxc?.status === "available";
-        if (!hasVerifiedZxc && !hasLocalVideos) {
-          return res.status(404).json({
-            status: false,
-            message: "Nguồn ZXC của tập này chưa được xác minh",
-          });
-        }
-      }
 
       // Rebuild auto-provider embeds from current TMDB metadata; keep custom embeds.
       if (movie.tmdb?.id) {
