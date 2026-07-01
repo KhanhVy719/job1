@@ -2,45 +2,45 @@
 # Tự động cấp & gia hạn TLS (Let's Encrypt) cho từng domain.
 # Caddy tự xử lý WebSocket upgrade (Socket.io ở cdn/server) — không cần cấu hình thêm.
 #
-# DNS yêu cầu: 4 bản ghi A (hoặc AAAA) trỏ về IP công khai của VPS:
-#   phim.tranhungdaocfs.site  -> VPS
-#   api1.tranhungdaocfs.site  -> VPS
-#   cdn.tranhungdaocfs.site   -> VPS
-#   core.tranhungdaocfs.site  -> VPS
-#   admin.tranhungdaocfs.site -> VPS
+# DNS yêu cầu: 5 bản ghi A (hoặc AAAA) trỏ về IP công khai của VPS:
+#   peakfilm.net                   -> VPS
+#   api.peakfilm.net               -> VPS
+#   cdn.peakfilm.net               -> VPS
+#   core.peakfilm.net              -> VPS
+#   adminpeakflim.peakfilm.net     -> VPS
 
 # Email dùng cho Let's Encrypt (đổi nếu cần)
 {
-	email admin@tranhungdaocfs.site
+	email admin@peakfilm.net
 }
 
 # Site phim chính (client, Next.js)
-phim.tranhungdaocfs.site {
+peakfilm.net {
 	encode zstd gzip
 	reverse_proxy client:3000
 }
 
 # Web API (webapi)
-api1.tranhungdaocfs.site {
+api.peakfilm.net {
 	encode zstd gzip
 	reverse_proxy webapi:8001
 }
 
 # CDN / HLS streaming (cdn) — không nén video (HLS đã nén), tăng timeout cho stream
-cdn.tranhungdaocfs.site {
+cdn.peakfilm.net {
 	reverse_proxy cdn:8001 {
 		flush_interval -1
 	}
 }
 
 # Core service (server)
-core.tranhungdaocfs.site {
+core.peakfilm.net {
 	encode zstd gzip
 	reverse_proxy server:8001
 }
 
 # Admin dashboard (admin, Next.js)
-admin.tranhungdaocfs.site {
+adminpeakflim.peakfilm.net {
 	encode zstd gzip
 	reverse_proxy admin:3001
 }

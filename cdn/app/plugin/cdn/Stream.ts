@@ -54,7 +54,7 @@ const INTERNAL_CORE_BASE_URL = (
   process.env.INTERNAL_CORE_BASE_URL || "http://server:8001"
 ).replace(/\/$/, "");
 const CORE_PUBLIC_HOSTS = (
-  process.env.CORE_PUBLIC_HOSTS || "core.tranhungdaocfs.site"
+  process.env.CORE_PUBLIC_HOSTS || "core.peakfilm.net"
 )
   .split(",")
   .map((host) => host.trim().toLowerCase())
