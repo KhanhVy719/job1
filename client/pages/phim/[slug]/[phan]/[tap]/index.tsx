@@ -938,7 +938,6 @@ const XemPhim: NextPage<IPageProps> = (props) => {
               allow="fullscreen; autoplay; encrypted-media; picture-in-picture; web-share"
               referrerPolicy={hasSelfHostedVideo ? "no-referrer" : "origin-when-cross-origin"}
               sandbox={PLAYER_IFRAME_SANDBOX}
-              allowFullScreen
               src={playerSrc}
               onLoad={() => setIframeLoaded(true)}
             />
