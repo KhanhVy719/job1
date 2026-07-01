@@ -134,13 +134,23 @@ interface EmbedServerOption {
   url: string;
 }
 
+const VSEMBED_ORIGIN = (process.env.NEXT_PUBLIC_VSEMBED_ORIGIN || "https://vsembed.su").replace(/\/$/, "");
+const VSEMBED_LEGACY_HOSTS = new Set([
+  "vidsrc-embed.ru",
+  "vidsrc-embed.su",
+  "vidsrcme.su",
+  "vsrc.su",
+  "vsembed.ru",
+  "vsembed.su",
+]);
+
 const EMBED_PROVIDERS = [
   {
     id: "vsembed",
     label: "VSEmbed",
-    movie: (tmdbId: string) => `https://vidsrc-embed.ru/embed/movie?tmdb=${tmdbId}`,
+    movie: (tmdbId: string) => `${VSEMBED_ORIGIN}/embed/movie?tmdb=${tmdbId}`,
     tv: (tmdbId: string, season: number, episode: number) =>
-      `https://vidsrc-embed.ru/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
+      `${VSEMBED_ORIGIN}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
   },
 ];
 
@@ -149,6 +159,19 @@ const SELF_HOSTED_PLAYER_VERSION = "captcha-query-20260630-allow-origin";
 const getUrlOrigin = (url: string) => {
   try {
     return new URL(url).origin;
+  } catch {
+    return "";
+  }
+};
+
+const normalizeEmbedUrl = (url: string) => {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    if (VSEMBED_LEGACY_HOSTS.has(parsed.hostname.toLowerCase())) {
+      return `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    return parsed.toString();
   } catch {
     return "";
   }
@@ -312,6 +335,11 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     const tmdbId = movie?.tmdb?.id;
     if (!tmdbId || !currentEpData) {
       return [];
+    }
+
+    const episodeEmbedUrl = normalizeEmbedUrl(currentEpData.embed_url || "");
+    if (episodeEmbedUrl) {
+      return [{ id: "vsembed-episode", label: "VSEmbed", url: episodeEmbedUrl }];
     }
 
     const normalizedTmdbId = encodeURIComponent(String(tmdbId));
