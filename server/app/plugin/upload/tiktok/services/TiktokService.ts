@@ -440,6 +440,13 @@ class TiktokService {
     return typeof n === "number" && isFinite(n) && n > 0 ? n : fallback;
   }
 
+  private uploadThreadLimit(): number {
+    return Math.max(
+      1,
+      Math.min(4, Math.floor(this.positiveNumber(process.env.UPLOAD_MAX_THREADS, 4)))
+    );
+  }
+
   private mbToBytes(mb: number): number {
     return Math.floor(mb * 1024 * 1024);
   }
@@ -537,6 +544,7 @@ class TiktokService {
       segDuration
     );
     let seg = policy.selectedSegmentDuration;
+    const uploadThreads = this.uploadThreadLimit();
     const maxEncodeAttempts = Math.max(
       1,
       Math.min(
@@ -553,12 +561,13 @@ class TiktokService {
       `[Job ${jobId}] Sizing: target=${(policy.targetSegmentBytes / 1048576).toFixed(2)}MB ` +
       `max=${(policy.maxSegmentBytes / 1048576).toFixed(2)}MB ` +
       `bitrate=${policy.sourceBitrate || "?"}bps -> hls_time=${seg}s ` +
-      `maxrate=${policy.maxVideoBitrate}bps attempts=${maxEncodeAttempts}`
+      `maxrate=${policy.maxVideoBitrate}bps attempts=${maxEncodeAttempts} threads=${uploadThreads}`
     );
 
     const buildArgs = (duration: number) => [
       "-y", "-i", inputFile, "-c:v", "libx264", "-preset", "ultrafast",
       "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "23", "-g", String(Math.max(1, Math.round(duration * 6))),
+      "-threads", String(uploadThreads),
       "-maxrate:v", String(policy.maxVideoBitrate), "-bufsize:v", String(policy.videoBufferSize),
       "-force_key_frames", `expr:gte(t,n_forced*${duration})`,
       "-sc_threshold", "0", "-c:a", "aac", "-b:a", "128k", "-ac", "2",
@@ -635,7 +644,7 @@ class TiktokService {
       }
 
       const uploadedData: { segment: string; imgUrl: string }[] = [];
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = uploadThreads;
       
       // Giai đoạn 2: Upload segment TS đã mã hóa lên TikTok PNG/iTXt (70-100%).
       const totalFiles = tsFiles.length;
