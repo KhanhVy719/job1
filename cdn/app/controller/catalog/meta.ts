@@ -10,6 +10,7 @@ class MetaController {
       "https://localhost:3000",
       "https://127.0.0.1:3000",
       "https://peakfilm.net",
+      "https://flim.peakfilm.net",
     ];
 
     const envOrigins = (

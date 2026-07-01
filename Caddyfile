@@ -2,8 +2,9 @@
 # Tự động cấp & gia hạn TLS (Let's Encrypt) cho từng domain.
 # Caddy tự xử lý WebSocket upgrade (Socket.io ở cdn/server) — không cần cấu hình thêm.
 #
-# DNS yêu cầu: 5 bản ghi A (hoặc AAAA) trỏ về IP công khai của VPS:
+# DNS yêu cầu: 6 bản ghi A (hoặc AAAA) trỏ về IP công khai của VPS:
 #   peakfilm.net                   -> VPS
+#   flim.peakfilm.net              -> VPS
 #   api.peakfilm.net               -> VPS
 #   cdn.peakfilm.net               -> VPS
 #   core.peakfilm.net              -> VPS
@@ -16,6 +17,16 @@
 
 # Site phim chính (client, Next.js)
 peakfilm.net {
+	encode zstd gzip
+
+	@watch_page path_regexp watch_page ^/phim/[^/]+/[^/]+/[^/]+$
+	redir @watch_page https://flim.peakfilm.net{uri} 302
+
+	reverse_proxy client:3000
+}
+
+# Domain xem phim (client, Next.js)
+flim.peakfilm.net {
 	encode zstd gzip
 	reverse_proxy client:3000
 }
