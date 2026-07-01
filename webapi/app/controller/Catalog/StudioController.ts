@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Studio from "../../model/Studio";
 import Movie from "../../model/Movie";
 import { paginateResult, publicMovieConstraint } from "../Shared/shared";
+import ViewerTranslationService, { resolveViewerLanguage } from "../../services/ViewerTranslationService";
 
 
 class StudioController {
@@ -40,6 +41,7 @@ class StudioController {
   static getMovies = async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { page, limit } = req.query;
+    const viewerLanguage = resolveViewerLanguage(req);
     try {
       const parent = await Studio.findOne({ slug }).select("_id").lean();
       if (!parent) return res.json({ status: false, message: "Không tìm thấy dữ liệu" });
@@ -54,7 +56,10 @@ class StudioController {
         "",
         [{ path: "category", select: "name slug" }]
       );
-      res.json({ status: true, data: result });
+      res.json({
+        status: true,
+        data: await ViewerTranslationService.localizePaginationResult(result, viewerLanguage),
+      });
     } catch (e) {
       res.json({ status: false, message: "Lỗi lấy danh sách phim" });
     }

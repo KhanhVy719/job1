@@ -174,7 +174,7 @@ export const getServerSideProps: GetServerSideProps<{
   currentSlug: string;
 }> = async (context) => {
 
-  const { params, query } = context;
+  const { params, query, req } = context;
 
   const slug = (params?.slug as string) || "ALL";
   const page = Number(query.trang) || 1;
@@ -191,6 +191,10 @@ export const getServerSideProps: GetServerSideProps<{
     
     const response = await axiosInstance.get(API_ENDPOINTS.search, {
       params: apiParams,
+      headers: {
+        Cookie: req.headers.cookie || "",
+        "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+      },
     });
 
 console.log(API_ENDPOINTS.search,apiParams)

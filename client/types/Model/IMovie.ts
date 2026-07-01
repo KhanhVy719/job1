@@ -27,6 +27,7 @@ interface IMovie {
   category: ICategory[];
   country: ICountry[];
   seasons: ISeason[];
+  translations?: Record<string, Record<string, string>>;
   tmdb?: {
     type: string;
     id: string;

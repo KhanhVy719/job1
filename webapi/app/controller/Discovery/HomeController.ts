@@ -15,6 +15,10 @@ import {
   publicMovieConstraint,
 } from "../Shared/shared";
 import AIService, { AICreativeSection } from "../AIService";
+import ViewerTranslationService, {
+  resolveViewerLanguage,
+  ViewerLanguageCode,
+} from "../../services/ViewerTranslationService";
 
 // Agent dùng chung cho gọi lịch chiếu bên ngoài — keepAlive để tái dùng kết nối,
 // tránh tạo agent mới (rò rỉ socket) mỗi lần fetchExternalSchedule chạy.
@@ -152,7 +156,10 @@ class HomeController {
   /**
    * Lấy dữ liệu cho các section cố định (Pre-defined)
    */
-  private static async _fetchSectionData(key: string) {
+  private static async _fetchSectionData(
+    key: string,
+    language: ViewerLanguageCode | null = null
+  ) {
     const config = QUERY_MAPPING[key];
     if (!config) return { status: false, data: [] };
 
@@ -166,7 +173,10 @@ class HomeController {
       .populate("country", "name slug")
       .lean();
 
-    return { status: true, data };
+    return {
+      status: true,
+      data: await ViewerTranslationService.localizeMovies(data, language),
+    };
   }
 
   // =========================================================================
@@ -227,6 +237,7 @@ class HomeController {
 
   static getHomeData = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const pageKey = req.query.page as string;
 
       // ---------------------------------------------------------
@@ -250,13 +261,17 @@ class HomeController {
           .populate("category", "name slug")
           .populate("country", "name slug")
           .lean();
+        const localizedData = await ViewerTranslationService.localizeMovies(data, viewerLanguage);
 
 
         console.log("[DONE]" + aiSection.title);
         return res.json({
           status: true,
-          data: data,
-          title: aiSection.title, // Tiêu đề AI đặt (VD: "Phim Hành Động Mãn Nhãn 2024")
+          data: localizedData,
+          title: ViewerTranslationService.localizeSectionTitle(
+            { queryKey: "infinite_random", title: aiSection.title },
+            viewerLanguage
+          ),
           is_infinite: true,
         });
       }
@@ -268,14 +283,16 @@ class HomeController {
         const config = ALL_SECTIONS_CONFIG.find((c) => c.queryKey === pageKey);
 
         // Lấy dữ liệu phim
-        const dataResult = await this._fetchSectionData(pageKey);
+        const dataResult = await this._fetchSectionData(pageKey, viewerLanguage);
 
         // (Optional) Gọi AI đặt tên lại cho hay hơn, hoặc dùng tên gốc
         // Ở đây dùng tên gốc cho nhanh, hoặc bạn có thể dùng generateCatchyTitle nếu muốn
         return res.json({
           status: true,
           data: dataResult.data,
-          title: config?.title || "Phim Hay",
+          title:
+            ViewerTranslationService.localizeSectionTitle(config || { title: "Phim Hay" }, viewerLanguage) ||
+            "Phim Hay",
         });
       }
 
@@ -301,11 +318,10 @@ class HomeController {
 
         // Có thể thêm logic AI đặt tên ở đây nếu muốn (như phiên bản trước)
         // Hiện tại giữ đơn giản để load nhanh
-        const dbResult = await this._fetchSectionData(key);
+        const dbResult = await this._fetchSectionData(key, viewerLanguage);
 
         return {
-          ...config,
-          title: config.title,
+          ...ViewerTranslationService.localizeSectionConfig(config, viewerLanguage),
           data: dbResult.data || [],
         };
       });
@@ -314,7 +330,10 @@ class HomeController {
         sliderTask,
         ...sectionTasks,
       ]);
-      const sliderWithPlayUrls = await this._attachFirstPlayUrls(slider);
+      const sliderWithPlayUrls = await ViewerTranslationService.localizeMovies(
+        await this._attachFirstPlayUrls(slider),
+        viewerLanguage
+      );
 
       const validSections = sectionsRaw.filter(
         (s: any) => s && s.data.length > 0
@@ -322,7 +341,7 @@ class HomeController {
       const loadedSlugs = validSections.map((s: any) => s.slug);
       const remaining = ALL_SECTIONS_CONFIG.filter(
         (s) => !loadedSlugs.includes(s.slug)
-      );
+      ).map((section) => ViewerTranslationService.localizeSectionConfig(section, viewerLanguage));
 
       res.json({
         status: true,
@@ -370,19 +389,23 @@ class HomeController {
     return `/${path.replace(/^\/+/, "")}`;
   }
 
-  private static async buildLegacyScheduleResponse(scheduleItems: any[]) {
+  private static async buildLegacyScheduleResponse(
+    scheduleItems: any[],
+    language: ViewerLanguageCode | null = null
+  ) {
     const slugs = Array.from(new Set(scheduleItems.map((item) => item.movie_slug).filter(Boolean)));
-    const localMovies = await Movie.find({ slug: { $in: slugs } })
-      .select("slug name thumb_url poster_url episode_current quality")
+    const localMoviesRaw = await Movie.find({ slug: { $in: slugs } })
+      .select("slug name origin_name thumb_url poster_url episode_current quality translations")
       .lean();
+    const localMovies = await ViewerTranslationService.localizeMovies(localMoviesRaw, language);
     const localMovieMap = new Map(localMovies.map((movie: any) => [movie.slug, movie]));
 
     return scheduleItems.map((item: any) => {
       const localMovie = localMovieMap.get(item.movie_slug);
       const movie = {
         id: item.movie_id || item.movie_snapshot?.id || item.source_id || item._id,
-        title: item.movie_name,
-        name: item.movie_name,
+        title: localMovie?.name || item.movie_name,
+        name: localMovie?.name || item.movie_name,
         slug: item.movie_slug,
         quality: item.quality || item.movie_snapshot?.quality || localMovie?.quality || "",
         thumbnail: this.toImagePath(item.thumbnail || item.movie_snapshot?.thumbnail || localMovie?.thumb_url),
@@ -528,18 +551,19 @@ class HomeController {
   }
 
   static getScheduledMovies = async (req: Request, res: Response) => {
+    const viewerLanguage = resolveViewerLanguage(req);
     const date = this.normalizeScheduleDate(req.query.date);
     if (!date) return res.status(400).json({ status: false, message: "Missing or invalid date" });
 
     try {
       const localItems = await this.getLocalScheduleByDate(date);
       if (localItems.length > 0 || process.env.SCHEDULE_DISABLE_EXTERNAL_FALLBACK === "true") {
-        const data = await this.buildLegacyScheduleResponse(localItems);
+        const data = await this.buildLegacyScheduleResponse(localItems, viewerLanguage);
         return res.json({ status: true, data, source: localItems.length > 0 ? "local" : "empty", message: "Lấy lịch chiếu thành công" });
       }
 
       const externalItems = this.normalizeExternalSchedule(await this.fetchExternalSchedule(date), date);
-      const data = await this.buildLegacyScheduleResponse(externalItems);
+      const data = await this.buildLegacyScheduleResponse(externalItems, viewerLanguage);
       return res.json({ status: true, data, source: externalItems.length > 0 ? "external" : "empty", message: "Lấy lịch chiếu thành công" });
     } catch (error: any) {
       console.error("[MovieService] Scheduled API ERROR:", error?.response?.data || error.message);

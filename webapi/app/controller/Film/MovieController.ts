@@ -7,6 +7,7 @@ import {
   publicMovieConstraint,
   publicPlayableMovieConstraint,
 } from "../Shared/shared";
+import ViewerTranslationService, { resolveViewerLanguage } from "../../services/ViewerTranslationService";
 interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
@@ -72,6 +73,7 @@ const isAutoManagedEmbed = (url: string, expectedUrl: string): boolean => {
 class MovieController {
   static getAllSeasons = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const viewerLanguage = resolveViewerLanguage(req);
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res
@@ -98,7 +100,7 @@ class MovieController {
 
       const list = await Promise.all(
         seasons.map(async (data) => {
-          const Episodes = await Episode.find({ season_id: data._id });
+          const Episodes = await Episode.find({ season_id: data._id }).lean();
           return {
             ...data,
             episodes: Episodes,
@@ -106,7 +108,10 @@ class MovieController {
         })
       );
 
-      res.json({ status: true, data: list });
+      res.json({
+        status: true,
+        data: ViewerTranslationService.localizeSeasons(list, viewerLanguage),
+      });
     } catch (e) {
       res.status(500).json({
         status: false,
@@ -117,6 +122,7 @@ class MovieController {
 
   static getDetail = async (req: Request, res: Response) => {
     const { slug } = req.params;
+    const viewerLanguage = resolveViewerLanguage(req);
     try {
       const movie = await Movie.findOne({
         slug,
@@ -138,7 +144,7 @@ class MovieController {
 
       res.json({
         status: true,
-        data: movie,
+        data: await ViewerTranslationService.localizeMovie(movie, viewerLanguage, { hydrate: true }),
       });
     } catch (e: any) {
       console.error(e);
@@ -148,6 +154,7 @@ class MovieController {
 
   static getSource = async (req: Request, res: Response) => {
     const { slug: movieSlug, episode_slug: episodeSlug } = req.params;
+    const viewerLanguage = resolveViewerLanguage(req);
 
     try {
       const movie = await Movie.findOne({
@@ -200,7 +207,7 @@ class MovieController {
 
       Episode.updateOne({ _id: episode._id }, { $inc: { views: 1 } }).exec();
 
-      res.json({ status: true, data: episode });
+      res.json({ status: true, data: ViewerTranslationService.localizeEpisode(episode, viewerLanguage) });
     } catch (e) {
       console.error(e);
       res.status(500).json({ status: false, message: "Lỗi lấy nguồn phim" });
@@ -210,6 +217,7 @@ class MovieController {
   static getRecommendations = async (req: Request, res: Response) => {
     const { slug } = req.params;
     const limit = Number(req.query.limit) || 12;
+    const viewerLanguage = resolveViewerLanguage(req);
 
     try {
       const escapeRegex = (text: string) =>
@@ -402,6 +410,7 @@ class MovieController {
             episode_current: 1,
             type: 1,
             category: 1,
+            translations: 1,
             totalScore: 1,
           },
         },
@@ -411,7 +420,10 @@ class MovieController {
         path: "category",
         select: "name slug",
       });
-      res.json({ status: true, data: relatedMovies });
+      res.json({
+        status: true,
+        data: await ViewerTranslationService.localizeMovies(relatedMovies, viewerLanguage),
+      });
     } catch (e) {
       console.error(e);
       res.json({ status: false, message: "Lỗi lấy danh sách đề xuất" });

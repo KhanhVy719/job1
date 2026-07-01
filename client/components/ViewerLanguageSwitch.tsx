@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
 import {
   getCookieViewerLanguage,
@@ -18,6 +19,7 @@ const ViewerLanguageSwitch: React.FC<ViewerLanguageSwitchProps> = ({
   className,
   compact = false,
 }) => {
+  const router = useRouter();
   const [selectedLanguage, setSelectedLanguage] = useState<ViewerLanguageCode>("en");
 
   const applyLanguage = useCallback((code: string, persist: boolean) => {
@@ -32,7 +34,9 @@ const ViewerLanguageSwitch: React.FC<ViewerLanguageSwitchProps> = ({
     window.dispatchEvent(
       new CustomEvent("rophim:viewer-language-change", { detail: language })
     );
-  }, []);
+
+    void router.replace(router.asPath, undefined, { scroll: false });
+  }, [router]);
 
   useEffect(() => {
     const storedLanguage = localStorage.getItem(VIEWER_LANGUAGE_STORAGE_KEY) || getCookieViewerLanguage();

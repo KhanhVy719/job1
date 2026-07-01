@@ -15,6 +15,7 @@ export interface ISeason extends Document {
   poster_path?: string;
   air_date?: Date;
   episode_count: number;
+  translations?: Record<string, Record<string, string>>;
   
   // Array chứa ObjectId hoặc Object Episode đã populate
   episodes: Types.ObjectId[] | IEpisode[];
@@ -31,6 +32,7 @@ const SeasonSchema = new Schema<ISeason>(
     air_date: { type: Date },
     episode_count: { type: Number, default: 0 },
     episodes: [{ type: Schema.Types.ObjectId, ref: "Episode", default: [] }],
+    translations: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true } 
 );

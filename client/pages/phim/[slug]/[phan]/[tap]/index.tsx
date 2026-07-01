@@ -1145,14 +1145,26 @@ export const getServerSideProps: GetServerSideProps = withEncryptedProps(async (
 
 
   try {
-    const resDetail = await axiosInstance.get(API_ENDPOINTS.movie.detail(slug));
+    const apiHeaders = {
+      Cookie: req.headers.cookie || "",
+      "User-Agent": userAgent,
+    };
+
+    const resDetail = await axiosInstance.get(API_ENDPOINTS.movie.detail(slug), {
+      headers: apiHeaders,
+    });
     const dataDetail = resDetail.data;
 
     if (!dataDetail || !dataDetail.data) return { notFound: true };
 
     const [resProposal, resSessionsData] = await Promise.all([
-      axiosInstance.get(API_ENDPOINTS.movie.filterByProposal(slug), { params: { limit: 12 } }),
-      axiosInstance.get(API_ENDPOINTS.movie.Season(dataDetail.data._id)),
+      axiosInstance.get(API_ENDPOINTS.movie.filterByProposal(slug), {
+        params: { limit: 12 },
+        headers: apiHeaders,
+      }),
+      axiosInstance.get(API_ENDPOINTS.movie.Season(dataDetail.data._id), {
+        headers: apiHeaders,
+      }),
     ]);
 
     const proposals = resProposal.data.status ? resProposal.data.data : [];

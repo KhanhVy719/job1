@@ -9,4 +9,5 @@
   air_date?: string;
   episode_count: number;
   episodes: IEpisode[]; // Ref đến Episode
+  translations?: Record<string, Record<string, string>>;
 }

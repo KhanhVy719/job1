@@ -6,6 +6,7 @@ export interface ICountry extends Document {
   code: string; // Mã quốc gia (VD: VN, US, JP)
   name: string; // Tên hiển thị (VD: Việt Nam)
   slug: string; // Slug (VD: viet-nam)
+  translations?: Record<string, Record<string, string>>;
 }
 
 const CountrySchema = new mongoose.Schema<ICountry>(
@@ -19,6 +20,7 @@ const CountrySchema = new mongoose.Schema<ICountry>(
     },
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, index: true }, // Bỏ unique ở slug, dùng iso làm key chính
+    translations: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

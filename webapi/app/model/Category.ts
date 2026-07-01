@@ -8,12 +8,14 @@ export interface ICategory extends Document {
   name: string;
   slug: string;
   description?: string;
+  translations?: Record<string, Record<string, string>>;
 }
 const categorySchema = new mongoose.Schema<ICategory>(
   {
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, index: true },
     description: { type: String, default: "" },
+    translations: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

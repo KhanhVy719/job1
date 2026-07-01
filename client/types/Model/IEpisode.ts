@@ -51,6 +51,7 @@ interface IEpisode {
   audios: IAudio[];
   subtitles: ISubtitle[];
   zxc?: IZxcVerification;
+  translations?: Record<string, Record<string, string>>;
 
   // System
   sort_order: number;

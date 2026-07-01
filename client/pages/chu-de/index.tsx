@@ -48,9 +48,15 @@ const DanhSachChuDe: React.FC<{
     );
 };
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (context) => {
     try {
-        const res = await axiosInstance.get(API_ENDPOINTS.menu.categories);
+        const { req } = context;
+        const res = await axiosInstance.get(API_ENDPOINTS.menu.categories, {
+            headers: {
+                Cookie: req.headers.cookie || "",
+                "User-Agent": req.headers["user-agent"] || "NextJS-Server",
+            },
+        });
         const result = res.data;
 
         let mappedData: Topic[] = [];

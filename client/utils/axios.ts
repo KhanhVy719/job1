@@ -71,6 +71,12 @@ axiosInstance.interceptors.request.use(
         // Hỗ trợ thêm header thường gặp khác nếu backend yêu cầu
         config.headers["X-CSRF-TOKEN"] = xsrfToken; 
       }
+
+      const viewerLanguage =
+        localStorage.getItem("rophim.viewerLanguage") || getCookie("viewer_language");
+      if (viewerLanguage) {
+        config.headers["X-Viewer-Language"] = viewerLanguage;
+      }
       
       // LƯU Ý QUAN TRỌNG:
       // Không cần và không thể làm: config.headers['Cookie'] = document.cookie;

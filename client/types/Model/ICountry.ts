@@ -3,4 +3,5 @@ interface ICountry {
   code: string; 
   name: string; 
   slug: string; 
+  translations?: Record<string, Record<string, string>>;
 }

@@ -5,6 +5,7 @@ import Movie from "../../model/Movie";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Types } from "mongoose";
+import ViewerTranslationService, { resolveViewerLanguage } from "../../services/ViewerTranslationService";
 
 // Bắt buộc đọc từ ENV. Không có fallback hardcode (lộ secret = giả mạo được mọi JWT).
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
@@ -112,6 +113,7 @@ class AuthController {
 
   static getProfile = async (req: Request, res: Response): Promise<void> => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const currentUser = (req as any).user;
 
       if (!currentUser) throw new Error("Thiếu thông tin xác thực");
@@ -120,16 +122,16 @@ class AuthController {
 
       const user = await User.findById(userId)
         .select("-password")
-        .populate("favorites", "name slug thumb_url")
-        .populate("history.movie", "name slug thumb_url episode_current")
+        .populate("favorites", "name origin_name slug thumb_url translations")
+        .populate("history.movie", "name origin_name slug thumb_url episode_current translations")
         .lean();
 
       if (!user) throw new Error("User không tồn tại");
 
       const playlists = await Playlist.find({ user: userId }).lean();
 
-      res.json({ 
-        data: { ...user, playlists } 
+      res.json({
+        data: await ViewerTranslationService.localizeUserProfile({ ...user, playlists }, viewerLanguage),
       });
 
     } catch (error: unknown) {

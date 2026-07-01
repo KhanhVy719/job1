@@ -36,6 +36,7 @@ export interface IMovie extends Document {
   director: Types.ObjectId[] | IActor[];
   category: Types.ObjectId[] | ICategory[];
   country: Types.ObjectId[] | ICountry[];
+  translations?: Record<string, Record<string, string>>;
 
   // Tham chiếu đến Season Model
   seasons: Types.ObjectId[] | ISeason[];
@@ -89,6 +90,7 @@ const movieSchema = new Schema<IMovie>(
     category: [{ type: Schema.Types.ObjectId, ref: "Category", default: [] }],
     country: [{ type: Schema.Types.ObjectId, ref: "Country", default: [] }],
     seasons: [{ type: Schema.Types.ObjectId, ref: "Season", default: [] }],
+    translations: { type: Schema.Types.Mixed, default: {} },
 
     title_logo: { type: String, default: "" },
     time: { type: String, default: "" },

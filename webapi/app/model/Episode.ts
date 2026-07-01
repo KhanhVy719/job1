@@ -106,6 +106,7 @@ export interface IEpisode extends Document {
   audios: IAudioResource[];
   subtitles: ISubtitleResource[];
   zxc?: IZxcVerification;
+  translations?: Record<string, Record<string, string>>;
 
   sort_order: number;
   views: number;
@@ -146,6 +147,7 @@ const EpisodeSchema = new Schema<IEpisode>(
     audios: { type: [AudioSchema], default: [] },
     subtitles: { type: [SubtitleSchema], default: [] },
     zxc: { type: ZxcVerificationSchema, default: () => ({ status: "unknown" }) },
+    translations: { type: Schema.Types.Mixed, default: {} },
 
     sort_order: { type: Number, default: 1 },
     views: { type: Number, default: 0 },

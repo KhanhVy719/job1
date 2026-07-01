@@ -4,6 +4,10 @@ import Comment from "../../model/Comment";
 import Movie from "../../model/Movie";
 import Episode from "../../model/Episode";
 import { extractToken } from "../../../utils/extractToken";
+import ViewerTranslationService, {
+  resolveViewerLanguage,
+  ViewerLanguageCode,
+} from "../../services/ViewerTranslationService";
 
 type AuthRequest = Request & {
   user?: {
@@ -15,8 +19,8 @@ const MAX_COMMENT_LENGTH = 1000;
 
 const populateFields = [
   { path: "user_id", select: "fullname avatar verify gender level" },
-  { path: "movie_id", select: "name origin_name slug thumb_url poster_url" },
-  { path: "episode_id", select: "name slug episode" },
+  { path: "movie_id", select: "name origin_name slug thumb_url poster_url translations" },
+  { path: "episode_id", select: "name slug episode translations" },
 ];
 
 const toObjectId = (value?: string | null) => {
@@ -92,9 +96,30 @@ const serializeComment = (comment: any, viewerId?: string | null) => {
   };
 };
 
+const localizeComment = async (comment: any, language: ViewerLanguageCode | null) => {
+  if (!ViewerTranslationService.isSupportedLanguage(language)) return comment;
+  return {
+    ...comment,
+    movie_id: await ViewerTranslationService.localizeMovie(comment.movie_id, language),
+    episode_id: ViewerTranslationService.localizeEpisode(comment.episode_id, language),
+  };
+};
+
+const serializeComments = async (
+  comments: any[],
+  viewerId: string | null | undefined,
+  language: ViewerLanguageCode | null
+) => {
+  const localizedComments = await Promise.all(
+    comments.map((comment) => localizeComment(comment, language))
+  );
+  return localizedComments.map((comment) => serializeComment(comment, viewerId));
+};
+
 class CommentController {
   static list = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const { page, limit, skip } = getPagination(req);
       const movieId = toObjectId(req.query.movie_id as string);
       const episodeId = toObjectId(req.query.episode_id as string);
@@ -136,7 +161,7 @@ class CommentController {
 
       return res.json({
         status: true,
-        data: comments.map((comment) => serializeComment(comment, viewerId)),
+        data: await serializeComments(comments, viewerId, viewerLanguage),
         meta: {
           page,
           limit,
@@ -156,6 +181,7 @@ class CommentController {
 
   static create = async (req: AuthRequest, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const userId = req.user?._id;
       if (!userId) {
         return res.status(401).json({
@@ -245,7 +271,7 @@ class CommentController {
 
       return res.status(201).json({
         status: true,
-        data: serializeComment(populated, String(userId)),
+        data: serializeComment(await localizeComment(populated, viewerLanguage), String(userId)),
       });
     } catch (error) {
       console.error(error);
@@ -258,6 +284,7 @@ class CommentController {
 
   static vote = async (req: AuthRequest, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const userId = req.user?._id;
       if (!userId) {
         return res.status(401).json({
@@ -310,7 +337,7 @@ class CommentController {
 
       return res.json({
         status: true,
-        data: serializeComment(populated, userIdString),
+        data: serializeComment(await localizeComment(populated, viewerLanguage), userIdString),
       });
     } catch (error) {
       console.error(error);
@@ -323,6 +350,7 @@ class CommentController {
 
   static latest = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const limit = Math.min(Math.max(Number(req.query.limit) || 12, 1), 30);
       const comments = await Comment.find({ status: "visible" })
         .sort({ createdAt: -1 })
@@ -332,7 +360,7 @@ class CommentController {
 
       return res.json({
         status: true,
-        data: comments.map((comment) => serializeComment(comment)),
+        data: await serializeComments(comments, null, viewerLanguage),
       });
     } catch (error) {
       console.error(error);
@@ -345,6 +373,7 @@ class CommentController {
 
   static top = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 30);
       const comments = await Comment.find({
         status: "visible",
@@ -357,7 +386,7 @@ class CommentController {
 
       return res.json({
         status: true,
-        data: comments.map((comment) => serializeComment(comment)),
+        data: await serializeComments(comments, null, viewerLanguage),
       });
     } catch (error) {
       console.error(error);
@@ -370,6 +399,7 @@ class CommentController {
 
   static activeMovies = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
       const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -399,9 +429,10 @@ class CommentController {
       }
 
       const movieIds = activity.map((item) => item._id);
-      const movies = await Movie.find({ _id: { $in: movieIds } })
-        .select("name slug thumb_url poster_url")
+      const moviesRaw = await Movie.find({ _id: { $in: movieIds } })
+        .select("name origin_name slug thumb_url poster_url translations")
         .lean();
+      const movies = await ViewerTranslationService.localizeMovies(moviesRaw, viewerLanguage);
       const movieMap = new Map(movies.map((movie) => [String(movie._id), movie]));
 
       const data = activity

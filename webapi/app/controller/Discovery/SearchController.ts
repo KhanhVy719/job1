@@ -5,6 +5,10 @@ import Category from "../../model/Category";
 import Country from "../../model/Country";
 import { publicMovieConstraint, SearchParams, toSlug } from "../Shared/shared";
 import AIService from "../AIService";
+import ViewerTranslationService, {
+  resolveViewerLanguage,
+  ViewerLanguageCode,
+} from "../../services/ViewerTranslationService";
 
 class SearchController {
   private static async _resolveId(model: any, key: string | undefined) {
@@ -66,7 +70,10 @@ class SearchController {
     return sortMap[sort] || sortMap.updatedAt;
   }
 
-  private static async _execute(params: SearchParams) {
+  private static async _execute(
+    params: SearchParams,
+    language: ViewerLanguageCode | null = null
+  ) {
     const { genres, countries, page = 1, limit = 24 } = params;
 
     const limitNum = Math.max(1, Number(limit));
@@ -137,10 +144,11 @@ class SearchController {
       { $project: { content: 0, actor: 0, director: 0, __v: 0 } },
     ];
 
-    const [totalItems, items] = await Promise.all([
+    const [totalItems, itemsRaw] = await Promise.all([
       Movie.countDocuments(matchStage),
       Movie.aggregate(pipeline),
     ]);
+    const items = await ViewerTranslationService.localizeMovies(itemsRaw, language);
 
     return {
       items,
@@ -155,12 +163,13 @@ class SearchController {
 
   static search = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const { q, page, limit } = req.query;
       const description = String(q || "").trim();
       const currentPage = Number(page) || 1;
       const limitNum = Number(limit) || 24;
 
-      const dbResult = await SearchController._execute(req.query);
+      const dbResult = await SearchController._execute(req.query, viewerLanguage);
 
       if (dbResult.items.length > 0) {
         return res.json({
@@ -180,11 +189,16 @@ class SearchController {
           limitNum
         );
         if (aiResult && aiResult.items.length > 0) {
-          const itemsWithBadges = aiResult.items.map((item: any) => ({
+          const localizedAiItems = await ViewerTranslationService.localizeMovies(aiResult.items, viewerLanguage);
+          const badgeText =
+            viewerLanguage === "fil"
+              ? "AI mungkahi"
+              : viewerLanguage === "en"
+                ? "AI suggestion"
+                : "AI Gợi Ý";
+          const itemsWithBadges = localizedAiItems.map((item: any) => ({
             ...item,
-            badges: [
-              { type: "ai_suggest", text: "✦ AI Gợi Ý", color: "#8b5cf6" },
-            ],
+            badges: [{ type: "ai_suggest", text: badgeText, color: "#8b5cf6" }],
           }));
 
           return res.json({
@@ -212,10 +226,11 @@ class SearchController {
 
   static byGenre = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const data = await SearchController._execute({
         ...req.query,
         genres: req.params.slug,
-      });
+      }, viewerLanguage);
       res.json({ status: true, data });
     } catch (e) {
       res.status(500).json({ status: false, message: "Genre Error" });
@@ -224,10 +239,11 @@ class SearchController {
 
   static byCountry = async (req: Request, res: Response) => {
     try {
+      const viewerLanguage = resolveViewerLanguage(req);
       const data = await SearchController._execute({
         ...req.query,
         countries: req.params.slug,
-      });
+      }, viewerLanguage);
       res.json({ status: true, data });
     } catch (e) {
       res.status(500).json({ status: false, message: "Country Error" });
