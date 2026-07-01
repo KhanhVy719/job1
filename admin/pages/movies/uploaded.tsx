@@ -139,6 +139,18 @@ export default function UploadedMoviesPage() {
     }
   };
 
+  const deleteJobHistory = async (job: UploadJob) => {
+    if (!confirm(`Xóa lịch sử upload lỗi "${job.original_name || job.job_id}"?`)) return;
+    setJobs((prevJobs) => prevJobs.filter((item) => item.job_id !== job.job_id));
+    try {
+      await axiosInstance.delete(API_ENDPOINTS.deleteUploadJob(job.job_id));
+      loadJobs();
+    } catch (error) {
+      console.error("Delete upload job history failed", error);
+      loadJobs();
+    }
+  };
+
   const jobStatusLabel = (status: UploadJob["status"]) => {
     if (status === "queued") return "Đang chờ";
     if (status === "running") return "Đang upload";
@@ -204,6 +216,7 @@ export default function UploadedMoviesPage() {
                     </div>
                   </div>
                   {active && <button onClick={() => cancelJob(job)} className="h-9 rounded-md bg-red-50 px-3 text-xs font-medium text-red-600 hover:bg-red-100">Hủy hàng đợi</button>}
+                  {job.status === "error" && <button onClick={() => deleteJobHistory(job)} className="h-9 rounded-md border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">Xóa lịch sử</button>}
                 </div>
               </div>
             );

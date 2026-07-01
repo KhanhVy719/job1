@@ -52,6 +52,7 @@ export const API_ENDPOINTS = {
   upload: "/api/v1/upload",
   uploadJobs: "/api/v1/upload/jobs",
   cancelUploadJob: (jobId: string) => `/api/v1/upload/jobs/${jobId}/cancel`,
+  deleteUploadJob: (jobId: string) => `/api/v1/upload/jobs/${jobId}`,
   category: {
     get: "/api/v1/category/list",
   },

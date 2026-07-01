@@ -128,6 +128,19 @@ class UploadJobQueue {
     return { job_id: jobId, status: "canceled", deleted: true };
   }
 
+  public async deleteHistory(jobId: string) {
+    const job = await UploadJob.findOne({ job_id: jobId });
+    if (!job) return null;
+
+    if (job.status === "queued" || job.status === "running") {
+      throw new Error("Cannot delete an active upload job. Cancel it first.");
+    }
+
+    await this.cleanupFile(job.file_path);
+    await UploadJob.deleteOne({ job_id: jobId });
+    return { job_id: jobId, status: job.status, deleted: true };
+  }
+
   private async waitForDbAndResume() {
     if (mongoose.connection.readyState !== 1) {
       try {

@@ -39,6 +39,7 @@ router.get('/admin/movies/:movieId/uploaded-episodes', AdminController.uploadedE
 router.delete('/admin/episodes/:episodeId/videos', AdminController.clearEpisodeVideos);
 router.get('/upload/jobs', UploadController.jobs);
 router.post('/upload/jobs/:jobId/cancel', UploadController.cancelJob);
+router.delete('/upload/jobs/:jobId', UploadController.deleteJob);
 router.get('/hls-proxy/playlist', HlsProxyController.playlist);
 router.get('/hls-proxy/jw-direct-playlist', HlsProxyController.jwDirectPlaylist);
 router.get('/hls-proxy/segment', HlsProxyController.segment);

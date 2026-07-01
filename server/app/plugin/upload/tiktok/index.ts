@@ -374,6 +374,23 @@ class UploadController {
     }
   };
 
+  public deleteJob = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const job = await UploadJobQueue.deleteHistory(req.params.jobId);
+      if (!job) {
+        res.status(404).json({ status: false, message: "Upload job not found" });
+        return;
+      }
+      res.json({ status: true, data: job, message: "Upload job history deleted" });
+    } catch (error: any) {
+      const activeJob = String(error?.message || "").includes("active upload job");
+      res.status(activeJob ? 409 : 500).json({
+        status: false,
+        message: error?.message || "Cannot delete upload job history",
+      });
+    }
+  };
+
   /**
    * Tải file từ URL về thư mục tmp.
    * Hỗ trợ tải binary (mp4) hoặc text (m3u8).
