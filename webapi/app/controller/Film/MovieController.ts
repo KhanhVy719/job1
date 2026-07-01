@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
+import axios from "axios";
 import mongoose, { LeanDocument } from "mongoose";
 import Movie from "../../model/Movie";
 import Episode, { IEpisode, IVideoResource } from "../../model/Episode";
@@ -14,6 +16,74 @@ const vseResolver = new VseResolver();
 interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
+
+const HLS_PROXY_SECRET =
+  process.env.HLS_PROXY_SECRET ||
+  process.env.JWT_SECRET ||
+  process.env.SECRET_KEY ||
+  "rophim-hls-proxy";
+
+const HLS_PROXY_UA =
+  process.env.VSE_USER_AGENT ||
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+const signHlsProxyUrl = (url: string) =>
+  crypto.createHmac("sha256", HLS_PROXY_SECRET).update(url).digest("base64url");
+
+const encodeHlsProxyUrl = (url: string) => Buffer.from(url, "utf8").toString("base64url");
+
+const decodeHlsProxyUrl = (value: string) => Buffer.from(value, "base64url").toString("utf8");
+
+const timingSafeEqualString = (left: string, right: string) => {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return (
+    leftBuffer.length === rightBuffer.length &&
+    crypto.timingSafeEqual(leftBuffer, rightBuffer)
+  );
+};
+
+const buildHlsProxyPath = (url: string) => {
+  const encoded = encodeHlsProxyUrl(url);
+  return `/api/v1/hls-proxy?u=${encodeURIComponent(encoded)}&s=${encodeURIComponent(
+    signHlsProxyUrl(url)
+  )}`;
+};
+
+const toAbsoluteHlsUrl = (value: string, baseUrl: string) => {
+  if (!value || /^data:/i.test(value)) return "";
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return "";
+  }
+};
+
+const rewriteHlsPlaylist = (playlist: string, playlistUrl: string) =>
+  playlist
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+
+      if (trimmed.startsWith("#")) {
+        return line.replace(/URI="([^"]+)"/g, (_match, uri) => {
+          const absolute = toAbsoluteHlsUrl(uri, playlistUrl);
+          return absolute ? `URI="${buildHlsProxyPath(absolute)}"` : `URI="${uri}"`;
+        });
+      }
+
+      const absolute = toAbsoluteHlsUrl(trimmed, playlistUrl);
+      return absolute ? buildHlsProxyPath(absolute) : line;
+    })
+    .join("\n");
+
+const setHlsProxyCors = (res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Range, Content-Type, Authorization");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+};
 
 const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vsembed.ru").replace(/\/+$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
@@ -391,7 +461,10 @@ class MovieController {
         data: {
           type: "hls",
           source: "vsembed",
-          sources: resolved.sources,
+          sources: resolved.sources.map((source) => ({
+            ...source,
+            proxy_url: buildHlsProxyPath(source.url),
+          })),
           subtitles: [...dbSubtitles, ...resolved.subtitles],
           poster: resolved.poster,
           embed_url: fallbackEmbed,
@@ -404,6 +477,88 @@ class MovieController {
         status: false,
         message: "Loi resolve nguon phim",
       });
+    }
+  };
+
+  static optionsHlsProxy = async (_req: Request, res: Response) => {
+    setHlsProxyCors(res);
+    return res.status(204).end();
+  };
+
+  static proxyHls = async (req: Request, res: Response) => {
+    setHlsProxyCors(res);
+
+    try {
+      const encodedUrl = String(req.query.u || "");
+      const signature = String(req.query.s || "");
+      if (!encodedUrl || !signature) {
+        return res.status(400).send("missing proxy params");
+      }
+
+      const targetUrl = decodeHlsProxyUrl(encodedUrl);
+      if (!/^https:\/\//i.test(targetUrl)) {
+        return res.status(400).send("invalid proxy url");
+      }
+
+      const expectedSignature = signHlsProxyUrl(targetUrl);
+      if (!timingSafeEqualString(signature, expectedSignature)) {
+        return res.status(403).send("invalid proxy signature");
+      }
+
+      const upstream = await axios.get(targetUrl, {
+        responseType: "stream",
+        timeout: Number(process.env.HLS_PROXY_TIMEOUT_MS) || 20_000,
+        maxRedirects: 5,
+        validateStatus: () => true,
+        headers: {
+          "User-Agent": HLS_PROXY_UA,
+          Accept: "*/*",
+          ...(req.headers.range ? { Range: req.headers.range } : {}),
+        },
+      });
+
+      res.status(upstream.status);
+      const contentType = String(upstream.headers["content-type"] || "");
+      const isPlaylist =
+        /\.m3u8(\?|#|$)/i.test(targetUrl) ||
+        /mpegurl|application\/vnd\.apple\.mpegurl/i.test(contentType);
+
+      if (isPlaylist) {
+        const chunks: Buffer[] = [];
+        upstream.data.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        upstream.data.on("end", () => {
+          const playlist = Buffer.concat(chunks).toString("utf8");
+          res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+          res.setHeader("Cache-Control", "no-store");
+          res.send(rewriteHlsPlaylist(playlist, targetUrl));
+        });
+        upstream.data.on("error", () => {
+          if (!res.headersSent) res.status(502);
+          res.end();
+        });
+        return;
+      }
+
+      const passthroughHeaders = [
+        "content-type",
+        "content-length",
+        "content-range",
+        "accept-ranges",
+        "cache-control",
+      ];
+      passthroughHeaders.forEach((header) => {
+        const value = upstream.headers[header];
+        if (value) res.setHeader(header, String(value));
+      });
+
+      upstream.data.pipe(res);
+    } catch (error) {
+      console.error(error);
+      if (!res.headersSent) {
+        res.status(502).send("hls proxy error");
+      } else {
+        res.end();
+      }
     }
   };
 

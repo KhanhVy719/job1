@@ -8,6 +8,7 @@ interface ResolvedSource {
   host?: string;
   format?: string;
   is_default?: boolean;
+  proxy_url?: string;
 }
 
 interface ResolvedSubtitle {
@@ -40,6 +41,10 @@ interface HlsPlayerProps {
 const SUB_OFF = -1;
 
 const withViewerToken = async (source: ResolvedSource): Promise<string> => {
+  if (source.proxy_url) {
+    return axiosInstance.resolveURL(source.proxy_url);
+  }
+
   if (!source.host || !/([?&]token=|__TOKEN(PG)?__)/i.test(source.url)) {
     return source.url;
   }

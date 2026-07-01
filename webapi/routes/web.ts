@@ -30,6 +30,8 @@ Router.get("/phim/:slug/de-xuat", MovieController.getRecommendations);
 Router.get("/phim/:slug", MovieController.getDetail);
 Router.get("/watch/:slug/:episode_slug", MovieController.getSource); 
 Router.get("/resolve/:slug/:episode_slug", MovieController.resolveSource);
+Router.options("/hls-proxy", MovieController.optionsHlsProxy);
+Router.get("/hls-proxy", MovieController.proxyHls);
 Router.get("/phim/:id/phan", MovieController.getAllSeasons);
 
 Router.get("/the-loai/:slug", SearchController.byGenre);
