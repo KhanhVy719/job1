@@ -458,6 +458,8 @@ class TiktokService {
     maxSegmentDuration: number;
     selectedSegmentDuration: number;
     sourceBitrate: number;
+    maxVideoBitrate: number;
+    videoBufferSize: number;
   } {
     const targetMb = this.positiveNumber(process.env.SEGMENT_TARGET_MB, 3.5);
     const maxMb = this.positiveNumber(process.env.SEGMENT_MAX_MB, 5);
@@ -477,6 +479,9 @@ class TiktokService {
     selected = Math.max(minSeconds, Math.min(maxSeconds, selected));
     selected = Math.round(selected * 100) / 100;
 
+    const maxTotalBitrate = Math.floor((maxBytes * 8 * 0.85) / selected);
+    const maxVideoBitrate = Math.max(300_000, maxTotalBitrate - 128_000);
+
     return {
       targetSegmentBytes: targetBytes,
       maxSegmentBytes: maxBytes,
@@ -484,6 +489,8 @@ class TiktokService {
       maxSegmentDuration: maxSeconds,
       selectedSegmentDuration: selected,
       sourceBitrate: bitrate,
+      maxVideoBitrate,
+      videoBufferSize: Math.max(maxVideoBitrate, maxVideoBitrate * 2),
     };
   }
 
@@ -530,15 +537,30 @@ class TiktokService {
       segDuration
     );
     let seg = policy.selectedSegmentDuration;
+    const maxEncodeAttempts = Math.max(
+      1,
+      Math.min(
+        3,
+        Math.floor(
+          this.positiveNumber(
+            process.env.ENCODE_MAX_ATTEMPTS,
+            process.env.ENCODE_RETRY_OVERSIZE === "true" ? 3 : 1
+          )
+        )
+      )
+    );
     console.log(
       `[Job ${jobId}] Sizing: target=${(policy.targetSegmentBytes / 1048576).toFixed(2)}MB ` +
       `max=${(policy.maxSegmentBytes / 1048576).toFixed(2)}MB ` +
-      `bitrate=${policy.sourceBitrate || "?"}bps -> hls_time=${seg}s`
+      `bitrate=${policy.sourceBitrate || "?"}bps -> hls_time=${seg}s ` +
+      `maxrate=${policy.maxVideoBitrate}bps attempts=${maxEncodeAttempts}`
     );
 
     const buildArgs = (duration: number) => [
       "-y", "-i", inputFile, "-c:v", "libx264", "-preset", "ultrafast",
       "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "23", "-g", String(Math.max(1, Math.round(duration * 6))),
+      "-maxrate:v", String(policy.maxVideoBitrate), "-bufsize:v", String(policy.videoBufferSize),
+      "-force_key_frames", `expr:gte(t,n_forced*${duration})`,
       "-sc_threshold", "0", "-c:a", "aac", "-b:a", "128k", "-ac", "2",
       "-hls_time", String(duration), "-hls_playlist_type", "vod",
       "-hls_segment_filename", segmentPattern,
@@ -564,9 +586,11 @@ class TiktokService {
 
       // Giai đoạn 1: FFmpeg + retry-shrink nếu segment vượt max (0-70%)
       let tsFiles: string[] = [];
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      for (let attempt = 1; attempt <= maxEncodeAttempts; attempt++) {
         if (shouldCancel?.()) throw new Error("UPLOAD_JOB_CANCELED");
         await clearGeneratedTs();
+        const attemptLabel = maxEncodeAttempts > 1 ? ` (${attempt}/${maxEncodeAttempts})` : "";
+        if (onProgress) onProgress(0, `Starting encoding${attemptLabel}...`);
         console.log(`[Job ${jobId}] FFmpeg attempt ${attempt} với hls_time=${seg}s...`);
         await this.spawnFFmpeg(buildArgs(seg), totalDurationSec, onProgress, shouldCancel);
         if (shouldCancel?.()) throw new Error("UPLOAD_JOB_CANCELED");
@@ -584,6 +608,13 @@ class TiktokService {
         }
 
         if (maxTsBytes <= policy.maxSegmentBytes || seg <= policy.minSegmentDuration) {
+          break;
+        }
+        if (attempt >= maxEncodeAttempts) {
+          console.warn(
+            `[Job ${jobId}] Largest segment ${(maxTsBytes / 1048576).toFixed(2)}MB is above ` +
+            `${(policy.maxSegmentBytes / 1048576).toFixed(2)}MB; continuing without another full re-encode.`
+          );
           break;
         }
         const ratio = Math.max(0.1, Math.min(0.9, policy.maxSegmentBytes / maxTsBytes));

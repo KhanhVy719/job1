@@ -655,9 +655,10 @@ class UploadJobQueue {
   }
 
   private writeProgress(jobId: string, percent: number, message: string, phase: string) {
-    const progress = Math.max(0, Math.min(100, Math.round(percent)));
+    let progress = Math.max(0, Math.min(100, Math.round(percent)));
     const now = Date.now();
     const last = this.lastProgressWrite.get(jobId);
+    if (last) progress = Math.max(progress, last.progress);
     if (last && now - last.at < 1000 && Math.abs(progress - last.progress) < 2) return;
     this.lastProgressWrite.set(jobId, { at: now, progress });
 
