@@ -58,7 +58,7 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Playback-Session', 'Accept','x-csrf-token','X-XSRF-TOKEN', 'Origin', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Playback-Session', 'X-Viewer-Language', 'Accept','x-csrf-token','X-XSRF-TOKEN', 'Origin', 'X-Requested-With'],
     credentials: true,
     // Cache preflight 24h — trình duyệt khỏi gửi lại OPTIONS cho mỗi request.
     maxAge: 86400,
