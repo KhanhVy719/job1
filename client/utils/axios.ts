@@ -134,6 +134,8 @@ export const API_ENDPOINTS = {
     detail: (slug: string) => `/api/v1/phim/${slug}`,
     watch: (slug: string, episode_slug: string) =>
       `/api/v1/watch/${slug}/${episode_slug}`,
+    resolve: (slug: string, episode_slug: string) =>
+      `/api/v1/resolve/${slug}/${episode_slug}`,
     filterByCategory: (slug: string) => `/api/v1/the-loai/${slug}`,
     filterByCountry: (slug: string) => `/api/v1/quoc-gia/${slug}`,
     filterByProposal: (slug: string) => `/api/v1/phim/${slug}/de-xuat`,

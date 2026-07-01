@@ -22,6 +22,7 @@ import icon from '@/types/icon';
 import Play from "@/components/loading/play";
 
 const ProposalGird2 = dynamic(() => import("@/components/Movie/ProposalGird2"), { ssr: false });
+const HlsPlayer = dynamic(() => import("@/components/player/HlsPlayer"), { ssr: false });
 
 interface IEpisodeVideo {
   type: string;
@@ -187,8 +188,6 @@ const EMBED_PROVIDERS = [
 
 const SELF_HOSTED_PLAYER_VERSION = "captcha-query-20260630-allow-origin";
 const SELF_HOSTED_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock";
-const EXTERNAL_EMBED_IFRAME_SANDBOX =
-  "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-storage-access-by-user-activation";
 
 const getUrlOrigin = (url: string) => {
   try {
@@ -213,8 +212,8 @@ const normalizeEmbedUrl = (
       if (!options?.isMovie && normalizedTmdbId && parsed.pathname.includes("/embed/tv")) {
         return buildVsembedTvUrl(
           normalizedTmdbId,
-          options.season || 1,
-          options.episode || 1
+          options?.season || 1,
+          options?.episode || 1
         );
       }
       return `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
@@ -444,6 +443,7 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     lastPlaybackRequestRef.current = playbackRequestKey;
 
     setEncryptedPayload(null);
+    setIframeLoaded(false);
     setLoadedSourceEpisodeId("");
     setSourceError("");
     try {
@@ -887,10 +887,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
     const video = v as unknown as IEpisodeVideo;
     return !!video.url && video.format !== 'embed';
   });
-  const activeEmbedServer = embedServerOptions[0];
-  const embedPlayerUrl = activeEmbedServer?.url || "";
   const hasLoadedSource = !!currentEpData?._id && loadedSourceEpisodeId === currentEpData._id;
-  const playerSrc = hasLoadedSource ? (hasSelfHostedVideo ? `${CDN_URL}/?v=${SELF_HOSTED_PLAYER_VERSION}` : embedPlayerUrl) : "";
+  const playerSrc = hasLoadedSource && hasSelfHostedVideo ? `${CDN_URL}/?v=${SELF_HOSTED_PLAYER_VERSION}` : "";
   const seoTitle = `${movie.name} (${movie.year}) ${movie.quality || 'HD'} Vietsub - Xem Phim ${movie.origin_name || ''}`;
   const seoDesc = movie.content ? movie.content.replace(/<[^>]*>?/gm, '').substring(0, 160) + "..." : `Xem phim ${movie.name} full HD...`;
   const sessionSlug = sessions.find(s => s._id === currentSeasonId)?.slug;
@@ -931,24 +929,36 @@ const XemPhim: NextPage<IPageProps> = (props) => {
 
       <div className='my-3 md:px-5 lg:px-6'>
         <div className='relative z-[15] w-full bg-gray-400 md:rounded-t-xl overflow-hidden aspect-video'>
-          {playerSrc ? (
-            <iframe
-              key={`${currentEpData ? currentEpData._id : 'loading'}-${hasSelfHostedVideo ? 'cdn' : activeEmbedServer?.id || 'embed'}`}
-              ref={playerRef}
-              className="absolute top-0 left-0 w-full h-full"
-              id="player"
-              allow="fullscreen; autoplay; encrypted-media; picture-in-picture; web-share"
-              referrerPolicy="no-referrer"
-              sandbox={hasSelfHostedVideo ? SELF_HOSTED_IFRAME_SANDBOX : EXTERNAL_EMBED_IFRAME_SANDBOX}
-              src={playerSrc}
-              onLoad={() => setIframeLoaded(true)}
-            />
-          ) : (
+          {!hasLoadedSource ? (
             <div className="absolute inset-0 flex items-center justify-center bg-black text-white text-sm">
               {sourceError || "Đang kiểm tra nguồn phát..."}
             </div>
+          ) : hasSelfHostedVideo ? (
+            <>
+              <iframe
+                key={`${currentEpData ? currentEpData._id : 'loading'}-cdn`}
+                ref={playerRef}
+                className="absolute top-0 left-0 w-full h-full"
+                id="player"
+                allow="fullscreen; autoplay; encrypted-media; picture-in-picture; web-share"
+                referrerPolicy="no-referrer"
+                sandbox={SELF_HOSTED_IFRAME_SANDBOX}
+                src={playerSrc}
+                onLoad={() => setIframeLoaded(true)}
+              />
+              {playerSrc && !iframeLoaded && (<div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20"><span className="text-white text-sm">Đang tải player...</span></div>)}
+            </>
+          ) : (
+            <HlsPlayer
+              key={`${currentEpData ? currentEpData._id : 'loading'}-hls`}
+              slug={slug as string}
+              episodeSlug={currentEpData?.slug || ""}
+              poster={movie.thumb_url || movie.poster_url}
+              autoPlay
+              onEnded={() => { if (autoNext) handleNextEpisode(); }}
+              className="absolute inset-0 w-full h-full"
+            />
           )}
-          {playerSrc && !iframeLoaded && (<div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20"><span className="text-white text-sm">Đang tải player...</span></div>)}
         </div>
         <div className='md:rounded-b-xl bg-[#08080A] py-3'>
           <div className='flex justify-between w-full px-5'>

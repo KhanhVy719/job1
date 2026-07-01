@@ -1,13 +1,16 @@
 import { Request, Response } from "express";
 import mongoose, { LeanDocument } from "mongoose";
 import Movie from "../../model/Movie";
-import Episode, { IEpisode } from "../../model/Episode";
+import Episode, { IEpisode, IVideoResource } from "../../model/Episode";
 import Season from "../../model/Season";
 import {
   publicMovieConstraint,
   publicPlayableMovieConstraint,
 } from "../Shared/shared";
 import ViewerTranslationService, { resolveViewerLanguage } from "../../services/ViewerTranslationService";
+import VseResolver from "../../services/VseResolver";
+
+const vseResolver = new VseResolver();
 interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
@@ -271,6 +274,136 @@ class MovieController {
     } catch (e) {
       console.error(e);
       res.status(500).json({ status: false, message: "Lỗi lấy nguồn phim" });
+    }
+  };
+
+  static resolveSource = async (req: Request, res: Response) => {
+    const { slug: movieSlug, episode_slug: episodeSlug } = req.params;
+
+    try {
+      const movie = await Movie.findOne({
+        slug: movieSlug,
+        ...publicPlayableMovieConstraint(),
+      })
+        .select("_id type tmdb imdb zxc")
+        .lean();
+
+      if (!movie) {
+        return res
+          .status(404)
+          .json({ status: false, message: "Phim khong ton tai" });
+      }
+
+      const episode: any = await Episode.findOne({
+        movie_id: movie._id,
+        slug: episodeSlug,
+      }).lean();
+
+      if (!episode) {
+        return res
+          .status(404)
+          .json({ status: false, message: "Tap phim khong ton tai" });
+      }
+
+      const selfHosted = (episode.videos || []).filter((video: IVideoResource) => {
+        if (!video?.url || String(video.format) === "embed") return false;
+        return /\.(m3u8|mp4|mkv)(\?|#|$)/i.test(video.url);
+      });
+
+      if (selfHosted.length) {
+        return res.json({
+          status: true,
+          data: {
+            type: "hls",
+            source: "self",
+            sources: selfHosted.map((video: IVideoResource) => ({
+              url: video.url,
+              quality: video.quality || "auto",
+              format: video.format,
+              is_default: video.is_default,
+            })),
+            subtitles: (episode.subtitles || []).map((subtitle: any) => ({
+              language: subtitle.language,
+              label: subtitle.label,
+              url: subtitle.url,
+            })),
+          },
+        });
+      }
+
+      const tmdbId = movie.tmdb?.id;
+      const isMovie = movie.type === "movie" || movie.tmdb?.type === "movie";
+
+      if (!tmdbId) {
+        return res.status(404).json({
+          status: false,
+          message: "Phim chua co nguon tu host va chua co TMDB id de resolve",
+        });
+      }
+
+      let seasonNumber = 1;
+      if (!isMovie) {
+        const season = await Season.findById(episode.season_id)
+          .select("season_number")
+          .lean();
+        seasonNumber = season?.season_number || 1;
+      }
+
+      const episodeNumber = episode.episode || 1;
+      const fallbackEmbed =
+        episode.embed_url ||
+        buildVidSrcEmbed(
+          movie.tmdb.id,
+          isMovie ? "movie" : "tv",
+          seasonNumber,
+          episodeNumber
+        );
+
+      const resolved = await vseResolver.resolve(
+        tmdbId,
+        isMovie ? "movie" : "tv",
+        seasonNumber,
+        episodeNumber
+      );
+
+      if (resolved.status !== "ok" || !resolved.sources.length) {
+        return res.json({
+          status: true,
+          data: {
+            type: "iframe",
+            source: "vsembed-fallback",
+            embed_url: fallbackEmbed,
+            reason: resolved.reason || "no-sources",
+            sources: [],
+            subtitles: resolved.subtitles || [],
+          },
+        });
+      }
+
+      const dbSubtitles = (episode.subtitles || []).map((subtitle: any) => ({
+        language: subtitle.language,
+        label: subtitle.label,
+        url: subtitle.url,
+      }));
+
+      return res.json({
+        status: true,
+        data: {
+          type: "hls",
+          source: "vsembed",
+          sources: resolved.sources,
+          subtitles: [...dbSubtitles, ...resolved.subtitles],
+          poster: resolved.poster,
+          embed_url: fallbackEmbed,
+          resolvedAt: resolved.resolvedAt,
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
+        status: false,
+        message: "Loi resolve nguon phim",
+      });
     }
   };
 
