@@ -330,6 +330,7 @@ class ViewerTranslationService {
 
     const mediaType = movie?.tmdb?.type === "movie" || movie?.type === "movie" ? "movie" : "tv";
     const tmdbLanguages = language === "fil" ? ["tl-PH", "en-US"] : ["en-US"];
+    let fallbackTranslation: MovieTranslation | null = null;
 
     for (const tmdbLanguage of tmdbLanguages) {
       const apiKey = getTmdbApiKey();
@@ -349,22 +350,24 @@ class ViewerTranslationService {
         const name = String(mediaType === "movie" ? payload.title || "" : payload.name || "").trim();
         const content = String(payload.overview || "").trim();
 
-        if (name || content) {
+        if (content) {
           return { name, content };
         }
+        if (name && !fallbackTranslation) fallbackTranslation = { name };
       } catch (error: any) {
         const status = error?.response?.status;
         if (status === 429) break;
       }
     }
 
-    return null;
+    return fallbackTranslation;
   }
 
   private static async getOrFetchMovieTranslation(movie: any, language: ViewerLanguageCode) {
     const cachedName = getTranslation(movie, language, "name");
     const cachedContent = getTranslation(movie, language, "content");
-    if (cachedName || cachedContent) return { name: cachedName, content: cachedContent };
+    if (cachedName && cachedContent) return { name: cachedName, content: cachedContent };
+    if (!cachedName && cachedContent) return { content: cachedContent };
 
     const movieId = String(movie?._id || "");
     if (!movieId) return null;
@@ -381,7 +384,11 @@ class ViewerTranslationService {
           if (translation.content) setPayload[`translations.${language}.content`] = translation.content;
 
           if (Object.keys(setPayload).length > 0) {
-            await Movie.updateOne({ _id: movieId }, { $set: setPayload }).exec().catch(() => undefined);
+            await Movie.updateOne(
+              { _id: movieId },
+              { $set: setPayload },
+              { timestamps: false }
+            ).exec().catch(() => undefined);
           }
 
           return translation;
