@@ -8,7 +8,6 @@ const EMBED_BASE = (
   process.env.VSE_EMBED_BASE ||
   process.env.VSEMBED_ORIGIN ||
   process.env.VSEMBED_BASE ||
-  process.env.VIDSRC_BASE ||
   "https://vsembed.ru"
 ).replace(/\/+$/, "");
 const RCP_HOST = process.env.VSE_RCP_HOST || "cloudorchestranova.com";
