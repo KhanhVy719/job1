@@ -1,7 +1,7 @@
 import mongoose, { Schema, type Document, type Model, type Types } from "mongoose";
 
 export type UploadJobStatus = "queued" | "running" | "success" | "error" | "canceled";
-export type UploadJobType = "file" | "url";
+export type UploadJobType = "file" | "url" | "torrent";
 
 export interface IUploadJob extends Document {
   _id: Types.ObjectId;
@@ -41,7 +41,7 @@ export interface IUploadJob extends Document {
 const UploadJobSchema = new Schema<IUploadJob>(
   {
     job_id: { type: String, required: true, unique: true, index: true },
-    type: { type: String, enum: ["file", "url"], required: true },
+    type: { type: String, enum: ["file", "url", "torrent"], required: true },
     status: {
       type: String,
       enum: ["queued", "running", "success", "error", "canceled"],

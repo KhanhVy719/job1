@@ -79,7 +79,7 @@ interface EpisodeUI {
 // Interface cho hàng đợi Upload Video
 interface VideoQueueItem {
     id: string;
-    type: 'file' | 'url';
+    type: 'file' | 'url' | 'torrent';
     file?: File;
     url?: string;
     name: string;
@@ -171,6 +171,32 @@ const CLIENT_UPLOAD_WEIGHT = 15;
 const clampPercent = (value: number): number => {
     if (!Number.isFinite(value)) return 0;
     return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const isTorrentSource = (value: string): boolean => {
+    const trimmed = value.trim();
+    return /^magnet:\?/i.test(trimmed) || /\.torrent(?:$|[?#])/i.test(trimmed);
+};
+
+const getImportSourceName = (value: string): string => {
+    const trimmed = value.trim();
+    const magnetName = trimmed.match(/[?&]dn=([^&]+)/i)?.[1];
+    if (magnetName) {
+        try {
+            return decodeURIComponent(magnetName.replace(/\+/g, " "));
+        } catch {
+            return magnetName;
+        }
+    }
+
+    const pathName = trimmed.split("?")[0].split("#")[0].split("/").filter(Boolean).pop();
+    if (!pathName) return isTorrentSource(trimmed) ? "Torrent video" : "Link Video";
+
+    try {
+        return decodeURIComponent(pathName);
+    } catch {
+        return pathName;
+    }
 };
 
 const mapServerProgress = (itemType: VideoQueueItem['type'], percent?: number): number => {
@@ -551,10 +577,10 @@ const Upload: React.FC = () => {
 
             const token = localStorage.getItem("access_token");
             if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-            if (item.type === 'url') xhr.setRequestHeader("Content-Type", "application/json");
+            if (!item.file) xhr.setRequestHeader("Content-Type", "application/json");
 
             xhr.upload.onprogress = (event) => {
-                if (item.type !== 'file') return;
+                if (!item.file) return;
 
                 const loaded = event.loaded || 0;
                 const total = event.lengthComputable ? event.total : (item.file?.size || 0);
@@ -578,7 +604,7 @@ const Upload: React.FC = () => {
             };
 
             xhr.upload.onload = () => {
-                if (item.type !== 'file') return;
+                if (!item.file) return;
                 setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
                     ...qItem,
                     phase: 'processing',
@@ -616,7 +642,7 @@ const Upload: React.FC = () => {
             xhr.onerror = () => reject(new Error("Network error during upload"));
             xhr.onabort = () => reject(new Error("Upload aborted"));
 
-            xhr.send(item.type === 'file' ? bodyData : JSON.stringify({ url: item.url, seg: 4 }));
+            xhr.send(item.file ? bodyData : JSON.stringify({ url: item.url, seg: 4, source_type: item.type === 'torrent' ? 'torrent' : undefined }));
         });
 
         if (finalErrorMessage || !finalResultUrl) {
@@ -631,7 +657,7 @@ const Upload: React.FC = () => {
             status: 'success',
             progress: 100,
             phase: 'done',
-            uploadProgress: item.type === 'file' ? 100 : item.uploadProgress,
+            uploadProgress: item.file ? 100 : item.uploadProgress,
             resultUrl: finalResultUrl,
             jobId: finalJobId,
             info: metadata.quality ? metadata : item.info,
@@ -644,14 +670,15 @@ const Upload: React.FC = () => {
             ...i,
             status: 'processing',
             progress: 0,
-            phase: item.type === 'file' ? 'uploading' : 'processing',
+            phase: item.file ? 'uploading' : 'processing',
             uploadProgress: 0,
-            message: item.type === 'file' ? 'Preparing upload...' : 'Connecting...'
+            message: item.file ? 'Preparing upload...' : 'Connecting...'
         } : i));
 
         const bodyData = new FormData();
-        if (item.type === 'file' && item.file) bodyData.append('video', item.file);
+        if (item.file) bodyData.append('video', item.file);
         else if (item.url) bodyData.append('url', item.url);
+        if (item.type === 'torrent') bodyData.append('source_type', 'torrent');
         bodyData.append('seg', '4');
 
         try {
@@ -668,21 +695,22 @@ const Upload: React.FC = () => {
             ...i,
             status: 'processing',
             progress: 0,
-            phase: item.type === 'file' ? 'uploading' : 'processing',
+            phase: item.file ? 'uploading' : 'processing',
             uploadProgress: 0,
-            message: item.type === 'file' ? 'Preparing upload...' : 'Connecting...'
+            message: item.file ? 'Preparing upload...' : 'Connecting...'
         } : i));
 
         const bodyData = new FormData();
-        if (item.type === 'file' && item.file) bodyData.append('video', item.file);
+        if (item.file) bodyData.append('video', item.file);
         else if (item.url) bodyData.append('url', item.url);
+        if (item.type === 'torrent') bodyData.append('source_type', 'torrent');
         bodyData.append('seg', '4');
 
         try {
             const response = await axiosInstance.post(API_ENDPOINTS.upload,
-                item.type === 'file' ? bodyData : { url: item.url },
+                item.file ? bodyData : { url: item.url, source_type: item.type === 'torrent' ? 'torrent' : undefined },
                 {
-                    headers: item.type === 'url' ? { 'Content-Type': 'application/json' } : undefined,
+                    headers: !item.file ? { 'Content-Type': 'application/json' } : undefined,
                     responseType: 'stream',
                     adapter: 'fetch',
                 }
@@ -772,8 +800,9 @@ const Upload: React.FC = () => {
         videoType: string
     ): Promise<void> => {
         const bodyData = new FormData();
-        if (item.type === 'file' && item.file) bodyData.append('video', item.file);
-        if (item.type === 'url' && item.url) bodyData.append('url', item.url);
+        if ((item.type === 'file' || item.type === 'torrent') && item.file) bodyData.append('video', item.file);
+        if ((item.type === 'url' || item.type === 'torrent') && item.url) bodyData.append('url', item.url);
+        if (item.type === 'torrent') bodyData.append('source_type', 'torrent');
         bodyData.append('episode_id', episodeId);
         bodyData.append('server_name', serverName || item.displayServer || 'TikTok Manual Upload');
         bodyData.append('type', videoType || item.displayType || 'phude');
@@ -782,16 +811,20 @@ const Upload: React.FC = () => {
         setVideoQueue(prev => prev.map(qItem => qItem.id === item.id ? {
             ...qItem,
             status: 'processing',
-            phase: item.type === 'file' ? 'uploading' : 'queued',
+            phase: item.file ? 'uploading' : 'queued',
             progress: 0,
             uploadProgress: 0,
-            message: item.type === 'file' ? 'Uploading source to server...' : 'Creating server job...'
+            message: item.file
+                ? 'Uploading source to server...'
+                : item.type === 'torrent'
+                    ? 'Creating torrent job...'
+                    : 'Creating server job...'
         } : qItem));
 
         const startedAt = Date.now();
         const res = await axiosInstance.post(API_ENDPOINTS.uploadJobs, bodyData, {
             onUploadProgress: (event) => {
-                if (item.type !== 'file') return;
+                if (!item.file) return;
                 const loaded = event.loaded || 0;
                 const total = event.total || item.file?.size || 0;
                 const uploadProgress = total > 0 ? clampPercent((loaded / total) * 100) : 0;
@@ -820,7 +853,7 @@ const Upload: React.FC = () => {
             status: 'queued',
             phase: 'queued',
             progress: 0,
-            uploadProgress: item.type === 'file' ? 100 : qItem.uploadProgress,
+            uploadProgress: item.file ? 100 : qItem.uploadProgress,
             message: 'Queued on server. You can leave this page.',
             jobId: job?.job_id
         } : qItem));
@@ -1080,20 +1113,23 @@ const Upload: React.FC = () => {
         if (isLoading) return;
         if (e.target.files && e.target.files.length > 0) {
             const newFiles = Array.from(e.target.files);
-            const newItems: VideoQueueItem[] = newFiles.map(file => ({
-                id: Date.now() + Math.random().toString(),
-                type: 'file',
-                file,
-                name: file.name,
-                status: 'pending',
-                progress: 0,
-                message: 'Waiting...',
-                storageId: currentStorageId,
-                storageName: getStorageName(currentStorageId),
-                displayServer: formData.server || 'VIP',
-                displayType: formData.type || 'phude',
-                detectedQuality: getInitialQualityFromFileName(file.name),
-            }));
+            const newItems: VideoQueueItem[] = newFiles.map(file => {
+                const isTorrentFile = file.name.toLowerCase().endsWith('.torrent');
+                return {
+                    id: Date.now() + Math.random().toString(),
+                    type: isTorrentFile ? 'torrent' : 'file',
+                    file,
+                    name: file.name,
+                    status: 'pending',
+                    progress: 0,
+                    message: 'Waiting...',
+                    storageId: currentStorageId,
+                    storageName: getStorageName(currentStorageId),
+                    displayServer: formData.server || 'VIP',
+                    displayType: formData.type || 'phude',
+                    detectedQuality: getInitialQualityFromFileName(file.name),
+                };
+            });
             setVideoQueue(prev => [...prev, ...newItems]);
         }
         if (videoFileInputRef.current) videoFileInputRef.current.value = '';
@@ -1102,11 +1138,13 @@ const Upload: React.FC = () => {
     const handleAddUrl = () => {
         if (isLoading) return;
         if (!importVideoUrl.trim()) { toast.error("Vui lòng nhập URL!"); return; }
+        const sourceUrl = importVideoUrl.trim();
+        const sourceType: VideoQueueItem['type'] = isTorrentSource(sourceUrl) ? 'torrent' : 'url';
         const newItem: VideoQueueItem = {
             id: Date.now() + Math.random().toString(),
-            type: 'url',
-            url: importVideoUrl,
-            name: importVideoUrl.split('/').pop()?.split('?')[0] || 'Link Video',
+            type: sourceType,
+            url: sourceUrl,
+            name: getImportSourceName(sourceUrl),
             status: 'pending',
             progress: 0,
             message: 'Waiting...',
@@ -1114,7 +1152,7 @@ const Upload: React.FC = () => {
             storageName: getStorageName(currentStorageId),
             displayServer: formData.server || 'VIP',
             displayType: formData.type || 'phude',
-            detectedQuality: getInitialQualityFromFileName(importVideoUrl),
+            detectedQuality: getInitialQualityFromFileName(sourceUrl),
         };
         setVideoQueue(prev => [...prev, newItem]);
         setImportVideoUrl('');
@@ -1185,7 +1223,7 @@ const Upload: React.FC = () => {
     return (
         <div className='px-3 lg:px-5 xl:px-8 py-5 '>
             <div className='text-xl font-semibold'>Đăng tải phim</div>
-            <div className='text-base mt-1 text-gray-400'>Upload video từ file hoặc import từ URL</div>
+            <div className='text-base mt-1 text-gray-400'>Upload video từ file, import URL hoặc torrent</div>
 
             <div className={`grid grid-cols-1 mt-6 lg:grid-cols-10 gap-5 h-full ${isLoading ? 'pointer-events-none opacity-60' : ''}`}>
                 <div className='lg:col-span-3'>
@@ -1194,21 +1232,21 @@ const Upload: React.FC = () => {
                         <div className='text-sm mt-1 text-gray-400'>Quản lý danh sách video đầu vào</div>
                         <div className='bg-gray-100 rounded-lg mt-4 p-1 flex items-center space-x-2'>
                             <button disabled={isLoading} className={`flex-1 text-sm py-2 rounded-lg transition ${uploadTab === 0 ? 'bg-white shadow text-black' : 'text-gray-500'}`} onClick={() => setUploadTab(0)}><i className="fa-regular fa-upload mr-2"></i>Upload</button>
-                            <button disabled={isLoading} className={`flex-1 text-sm py-2 rounded-lg transition ${uploadTab === 1 ? 'bg-white shadow text-black' : 'text-gray-500'}`} onClick={() => setUploadTab(1)}><i className="fa-regular fa-link mr-2"></i>Import</button>
+                            <button disabled={isLoading} className={`flex-1 text-sm py-2 rounded-lg transition ${uploadTab === 1 ? 'bg-white shadow text-black' : 'text-gray-500'}`} onClick={() => setUploadTab(1)}><i className="fa-regular fa-link mr-2"></i>Link/Torrent</button>
                         </div>
                         <div className='mt-3'>
                             {uploadTab === 0 ? (
                                 <div onClick={triggerVideoFileSelect} className={`border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition ${isLoading ? 'cursor-not-allowed' : ''}`}>
-                                    <input disabled={isLoading} type="file" ref={videoFileInputRef} onChange={handleVideoFileSelect} accept="video/mp4,video/x-m4v,video/*,.mkv,.ts" multiple className="hidden" />
+                                    <input disabled={isLoading} type="file" ref={videoFileInputRef} onChange={handleVideoFileSelect} accept="video/mp4,video/x-m4v,video/*,.mkv,.ts,.torrent" multiple className="hidden" />
                                     <i className="fa-regular fa-cloud-arrow-up text-5xl text-gray-400 mb-3"></i>
                                     <span className='text-black font-medium text-sm bg-gray-200 px-3 py-1.5 rounded-md'>Chọn files</span>
-                                    <p className='mt-2.5 text-[12px] text-gray-400 text-center'>MP4, MKV, AVI<br />(Cho phép nhiều file)</p>
+                                    <p className='mt-2.5 text-[12px] text-gray-400 text-center'>MP4, MKV, AVI, TORRENT<br />(Cho phép nhiều file)</p>
                                 </div>
                             ) : (
                                 <div className='mt-4'>
-                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Link Video (m3u8, mp4)</label>
+                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Link Video hoặc Torrent (m3u8, mp4, magnet, .torrent)</label>
                                     <div className="flex space-x-2">
-                                        <input disabled={isLoading} type="text" className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg text-sm' placeholder='https://...' value={importVideoUrl} onChange={e => setImportVideoUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddUrl()} />
+                                        <input disabled={isLoading} type="text" className='px-3 py-2.5 border-gray-300 outline-0 border w-full rounded-lg text-sm' placeholder='https://... hoặc magnet:?xt=...' value={importVideoUrl} onChange={e => setImportVideoUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddUrl()} />
                                         <button disabled={isLoading} onClick={handleAddUrl} className='bg-black text-white px-3 py-2.5 rounded-lg hover:bg-gray-800 transition'><i className="fa-solid fa-plus"></i></button>
                                     </div>
                                 </div>
@@ -1228,7 +1266,7 @@ const Upload: React.FC = () => {
 
                                             <div className="flex items-start justify-between relative z-10">
                                                 <div className="flex items-start space-x-2.5 overflow-hidden w-full">
-                                                    <div className={`mt-0.5 w-7 h-7 flex-shrink-0 rounded flex items-center justify-center text-xs ${item.type === 'file' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}><i className={`fa-solid ${item.type === 'file' ? 'fa-file-video' : 'fa-link'}`}></i></div>
+                                                    <div className={`mt-0.5 w-7 h-7 flex-shrink-0 rounded flex items-center justify-center text-xs ${item.type === 'file' ? 'bg-blue-100 text-blue-600' : item.type === 'torrent' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-600'}`}><i className={`fa-solid ${item.type === 'file' ? 'fa-file-video' : item.type === 'torrent' ? 'fa-magnet' : 'fa-link'}`}></i></div>
                                                     <div className="flex flex-col min-w-0 flex-1">
                                                         <span className="text-sm font-medium text-gray-700 truncate block" title={item.name}>{item.name}</span>
                                                         <div className='flex flex-wrap gap-1 mt-1 mb-1'>

@@ -15,6 +15,11 @@ interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
 
+const isTorrentSource = (source: string): boolean => {
+  const trimmed = source.trim();
+  return /^magnet:\?/i.test(trimmed) || /\.torrent(?:$|[?#])/i.test(trimmed);
+};
+
 interface VideoInput {
   filePath: string;
   originalName: string;
@@ -272,10 +277,25 @@ class UploadController {
 
     try {
       const sourceUrl = typeof req.body.url === "string" ? req.body.url.trim() : "";
+      const requestedSourceType = typeof req.body.source_type === "string"
+        ? req.body.source_type.trim().toLowerCase()
+        : "";
       if (!reqFile && !sourceUrl) {
         res.status(400).json({ status: false, message: "No video or URL provided." });
         return;
       }
+
+      const uploadedFileExt = reqFile?.originalname
+        ? path.extname(reqFile.originalname).toLowerCase()
+        : "";
+      const jobType =
+        reqFile && uploadedFileExt === ".torrent"
+          ? "torrent"
+          : reqFile
+            ? "file"
+            : requestedSourceType === "torrent" || isTorrentSource(sourceUrl)
+              ? "torrent"
+              : "url";
 
       const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "http")
         .split(",")[0]
@@ -283,7 +303,7 @@ class UploadController {
       const publicBaseUrl = `${proto}://${req.get("host")}`;
       const job = await UploadJobQueue.enqueue({
         jobId: uuidv4(),
-        type: reqFile ? "file" : "url",
+        type: jobType,
         publicBaseUrl,
         sourceUrl,
         filePath: reqFile?.path,
