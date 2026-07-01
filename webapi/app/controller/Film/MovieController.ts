@@ -18,7 +18,7 @@ const buildVidSrcEmbed = (
   episode?: number
 ): string => {
   if (!tmdbId) return "";
-  const embedBase = (process.env.VIDSRC_BASE || "https://vsembed.su").replace(/\/+$/, "");
+  const embedBase = (process.env.VIDSRC_BASE || "https://vidsrc-embed.ru").replace(/\/+$/, "");
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
@@ -43,6 +43,7 @@ const AUTO_EMBED_HOSTS = [
   "zxcstream.xyz",
   "vidlux.xyz",
   "vsembed.su",
+  "vsembed.ru",
   "vidsrc-embed.ru",
   "vidsrc-embed.su",
   "vidsrcme.su",

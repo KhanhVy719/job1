@@ -137,9 +137,9 @@ const EMBED_PROVIDERS = [
   {
     id: "vsembed",
     label: "VSEmbed",
-    movie: (tmdbId: string) => `https://vsembed.su/embed/movie?tmdb=${tmdbId}`,
+    movie: (tmdbId: string) => `https://vidsrc-embed.ru/embed/movie?tmdb=${tmdbId}`,
     tv: (tmdbId: string, season: number, episode: number) =>
-      `https://vsembed.su/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
+      `https://vidsrc-embed.ru/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
   },
 ];
 
@@ -855,9 +855,8 @@ const XemPhim: NextPage<IPageProps> = (props) => {
               ref={playerRef}
               className="absolute top-0 left-0 w-full h-full"
               id="player"
-              allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
-              referrerPolicy="no-referrer"
-              sandbox={hasSelfHostedVideo ? undefined : "allow-scripts allow-same-origin allow-forms allow-presentation"}
+              allow="fullscreen; autoplay; encrypted-media; picture-in-picture; web-share"
+              referrerPolicy={hasSelfHostedVideo ? "no-referrer" : "origin-when-cross-origin"}
               allowFullScreen
               src={playerSrc}
               onLoad={() => setIframeLoaded(true)}
