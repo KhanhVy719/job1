@@ -275,6 +275,12 @@ const phraseTranslations: Record<ViewerLanguageCode, Array<[string, string]>> = 
     ["Chưa có", "None yet"],
     ["Phim Lẻ", "Movies"],
     ["Phim Bộ", "Series"],
+    ["Chủ đề", "Topics"],
+    ["Phần", "Season"],
+    ["Tập", "Episode"],
+    ["Chương Trình Truyền Hình", "TV Shows"],
+    ["Phim Bí Ẩn", "Mystery"],
+    ["Phim Chiến Tranh", "War Movies"],
   ],
   fil: [
     ["Thuyết Minh", "May voice-over"],
@@ -293,6 +299,12 @@ const phraseTranslations: Record<ViewerLanguageCode, Array<[string, string]>> = 
     ["Chưa có", "Wala pa"],
     ["Phim Lẻ", "Mga Pelikula"],
     ["Phim Bộ", "Mga Serye"],
+    ["Chủ đề", "Paksa"],
+    ["Phần", "Season"],
+    ["Tập", "Episode"],
+    ["Chương Trình Truyền Hình", "TV Shows"],
+    ["Phim Bí Ẩn", "Mystery"],
+    ["Phim Chiến Tranh", "War Movies"],
   ],
 };
 
