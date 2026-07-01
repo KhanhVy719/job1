@@ -33,6 +33,14 @@ class UploadJobQueue {
   private lastProgressWrite = new Map<string, { at: number; progress: number }>();
   private readonly tmpDir = path.join(process.cwd(), "upload", "tiktok", "tmp");
   private readonly multerTmpDir = path.join(process.cwd(), "tmp");
+  private readonly torrentMetadataTimeoutSec = this.getPositiveEnvInt(
+    "TORRENT_METADATA_TIMEOUT_SEC",
+    180
+  );
+  private readonly torrentDownloadTimeoutSec = this.getPositiveEnvInt(
+    "TORRENT_DOWNLOAD_TIMEOUT_SEC",
+    7200
+  );
   private readonly videoExtensions = new Set([
     ".mp4",
     ".mkv",
@@ -388,6 +396,9 @@ class UploadJobQueue {
   }
 
   private async runAria2(job: IUploadJob, source: string, outputDir: string) {
+    const metadataTimeoutMs = this.torrentMetadataTimeoutSec * 1000;
+    const downloadTimeoutMs = this.torrentDownloadTimeoutSec * 1000;
+
     await new Promise<void>((resolve, reject) => {
       const args = [
         "--dir",
@@ -395,10 +406,18 @@ class UploadJobQueue {
         "--seed-time=0",
         "--follow-torrent=mem",
         "--bt-save-metadata=true",
+        `--bt-stop-timeout=${this.torrentMetadataTimeoutSec}`,
+        "--enable-dht=true",
+        "--enable-peer-exchange=true",
+        "--bt-enable-lpd=false",
         "--bt-max-peers=80",
         "--max-connection-per-server=8",
         "--split=8",
         "--file-allocation=none",
+        "--connect-timeout=20",
+        "--timeout=20",
+        "--retry-wait=5",
+        "--max-tries=3",
         "--summary-interval=1",
         "--console-log-level=notice",
         "--download-result=hide",
@@ -413,37 +432,115 @@ class UploadJobQueue {
       let output = "";
       let canceled = false;
       let settled = false;
+      let metadataLoaded = false;
+      let metadataLoadedAt = 0;
+      let pendingError: Error | null = null;
       let cancelTimer: ReturnType<typeof setInterval> | null = null;
+      let monitorTimer: ReturnType<typeof setInterval> | null = null;
+      let hardKillTimer: ReturnType<typeof setTimeout> | null = null;
 
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;
         if (cancelTimer) clearInterval(cancelTimer);
+        if (monitorTimer) clearInterval(monitorTimer);
+        if (hardKillTimer) clearTimeout(hardKillTimer);
         if (error) reject(error);
         else resolve();
       };
 
-      cancelTimer = setInterval(() => {
-        if (!this.cancelRequested.has(job.job_id)) return;
-        canceled = true;
+      const requestStop = (error: Error) => {
+        if (settled || pendingError) return;
+        pendingError = error;
         try {
           ps.kill("SIGTERM");
         } catch {}
+
+        hardKillTimer = setTimeout(() => {
+          if (settled) return;
+          try {
+            ps.kill("SIGKILL");
+          } catch {}
+          finish(error);
+        }, 5000);
+      };
+
+      const markMetadataLoaded = () => {
+        if (metadataLoaded) return;
+        metadataLoaded = true;
+        metadataLoadedAt = Date.now();
+        this.writeProgress(
+          job.job_id,
+          2,
+          "Torrent metadata loaded. Starting download...",
+          "downloading"
+        );
+      };
+
+      const startedAt = Date.now();
+      cancelTimer = setInterval(() => {
+        if (!this.cancelRequested.has(job.job_id)) return;
+        canceled = true;
+        requestStop(new Error(CANCELED_ERROR));
+      }, 1000);
+
+      monitorTimer = setInterval(() => {
+        if (this.cancelRequested.has(job.job_id)) {
+          canceled = true;
+          requestStop(new Error(CANCELED_ERROR));
+          return;
+        }
+
+        if (!metadataLoaded && this.hasVideoCandidateSync(outputDir)) {
+          markMetadataLoaded();
+        }
+
+        const elapsedMs = Date.now() - startedAt;
+        if (!metadataLoaded) {
+          const elapsedSec = Math.floor(elapsedMs / 1000);
+          this.writeProgress(
+            job.job_id,
+            1,
+            `Loading torrent metadata... ${elapsedSec}s/${this.torrentMetadataTimeoutSec}s`,
+            "downloading"
+          );
+
+          if (elapsedMs >= metadataTimeoutMs) {
+            requestStop(
+              new Error(
+                "Torrent metadata timeout. No peers returned metadata; try another magnet/torrent with seeders."
+              )
+            );
+          }
+          return;
+        }
+
+        if (elapsedMs >= downloadTimeoutMs) {
+          const elapsedDownloadSec = Math.floor((Date.now() - metadataLoadedAt) / 1000);
+          requestStop(
+            new Error(
+              `Torrent download timeout after ${elapsedDownloadSec}s. Try a healthier torrent or increase TORRENT_DOWNLOAD_TIMEOUT_SEC.`
+            )
+          );
+        }
       }, 1000);
 
       const handleOutput = (chunk: Buffer) => {
         const text = chunk.toString();
-        output += text;
+        output = `${output}${text}`.slice(-6000);
         if (this.cancelRequested.has(job.job_id)) {
           canceled = true;
-          try {
-            ps.kill("SIGTERM");
-          } catch {}
+          requestStop(new Error(CANCELED_ERROR));
           return;
+        }
+
+        if (!metadataLoaded && this.hasVideoCandidateSync(outputDir)) {
+          markMetadataLoaded();
         }
 
         const percentMatch = text.match(/\((\d{1,3})%\)/) || text.match(/\b(\d{1,3})%/);
         if (!percentMatch) return;
+        if (!metadataLoaded) return;
 
         const torrentPercent = Math.max(0, Math.min(100, Number(percentMatch[1])));
         const progress = Math.min(24, Math.max(2, Math.round(torrentPercent / 4)));
@@ -464,11 +561,65 @@ class UploadJobQueue {
         finish(new Error(message));
       });
       ps.on("close", (code) => {
-        if (canceled) finish(new Error(CANCELED_ERROR));
+        if (pendingError) finish(pendingError);
+        else if (canceled) finish(new Error(CANCELED_ERROR));
         else if (code === 0) finish();
-        else finish(new Error(`aria2c exited ${code}: ${output.slice(-2000)}`));
+        else if (!metadataLoaded && !this.hasVideoCandidateSync(outputDir)) {
+          finish(
+            new Error(
+              `Torrent metadata failed. No peers returned metadata; try another magnet/torrent with seeders. ${this.summarizeAria2Output(output)}`
+            )
+          );
+        } else {
+          finish(
+            new Error(
+              `Torrent download failed: aria2c exited ${code}. ${this.summarizeAria2Output(output)}`
+            )
+          );
+        }
       });
     });
+  }
+
+  private getPositiveEnvInt(name: string, fallback: number) {
+    const parsed = Number(process.env[name]);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+  }
+
+  private summarizeAria2Output(output: string) {
+    const summary = output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(-8)
+      .join(" | ")
+      .slice(-1200);
+    return summary ? `aria2 output: ${summary}` : "";
+  }
+
+  private hasVideoCandidateSync(rootDir: string) {
+    try {
+      if (!fs.existsSync(rootDir)) return false;
+      const pending = [rootDir];
+      while (pending.length) {
+        const currentDir = pending.pop();
+        if (!currentDir) continue;
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const entryPath = path.join(currentDir, entry.name);
+          if (entry.isDirectory()) {
+            pending.push(entryPath);
+            continue;
+          }
+          if (!entry.isFile()) continue;
+          if (this.videoExtensions.has(path.extname(entry.name).toLowerCase())) {
+            return true;
+          }
+        }
+      }
+    } catch {}
+    return false;
   }
 
   private async findLargestVideoFile(rootDir: string) {

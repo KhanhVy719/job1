@@ -20,6 +20,27 @@ const isTorrentSource = (source: string): boolean => {
   return /^magnet:\?/i.test(trimmed) || /\.torrent(?:$|[?#])/i.test(trimmed);
 };
 
+const getSourceDisplayName = (source: string): string => {
+  const trimmed = source.trim();
+  const magnetName = trimmed.match(/[?&]dn=([^&]+)/i)?.[1];
+  if (magnetName) {
+    try {
+      return decodeURIComponent(magnetName.replace(/\+/g, " "));
+    } catch {
+      return magnetName;
+    }
+  }
+
+  const pathName = trimmed.split("?")[0].split("#")[0].split("/").filter(Boolean).pop();
+  if (!pathName) return isTorrentSource(trimmed) ? "Torrent video" : "Remote video";
+
+  try {
+    return decodeURIComponent(pathName);
+  } catch {
+    return pathName;
+  }
+};
+
 interface VideoInput {
   filePath: string;
   originalName: string;
@@ -307,7 +328,7 @@ class UploadController {
         publicBaseUrl,
         sourceUrl,
         filePath: reqFile?.path,
-        originalName: reqFile?.originalname || sourceUrl.split("/").pop()?.split("?")[0] || "Remote video",
+        originalName: reqFile?.originalname || getSourceDisplayName(sourceUrl),
         fileSize: reqFile?.size || 0,
         episodeId: req.body.episode_id || req.body.episodeId,
         serverName: req.body.server_name || req.body.serverName || "TikTok Manual Upload",
