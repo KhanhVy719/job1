@@ -64,6 +64,7 @@ services:
       NODE_ENV: production
       VIDSRC_MOVIE_URL_TEMPLATE: "https://vsembed.ru/embed/movie/{tmdbId}"
       VIDSRC_TV_URL_TEMPLATE: "https://vsembed.ru/embed/tv/{tmdbId}/{season}-{episode}"
+      HLS_PROXY_ENABLED: "true"
     depends_on:
       - ollama
     ports:
