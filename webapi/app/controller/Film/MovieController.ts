@@ -14,6 +14,7 @@ interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
 
 const VSEMBED_ORIGIN = (process.env.VSEMBED_ORIGIN || process.env.VSEMBED_BASE || "https://vsembed.su").replace(/\/+$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
+  "vidsrc.me",
   "vidsrc-embed.ru",
   "vidsrc-embed.su",
   "vidsrcme.su",
@@ -34,15 +35,27 @@ const normalizeEmbedBase = (base: string): string => {
   return base.replace(/\/+$/, "");
 };
 
-const normalizeManagedEmbedUrl = (url: string, type: string, imdbId?: string): string => {
+const normalizeManagedEmbedUrl = (
+  url: string,
+  type: string,
+  tmdbId: string | number,
+  season?: number,
+  episode?: number
+): string => {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
     const isVsembedHost = VSEMBED_LEGACY_HOSTS.has(host);
     if (!isVsembedHost) return parsed.toString();
 
-    if (type === "movie" && imdbId && parsed.pathname.includes("/embed/movie")) {
-      return `${VSEMBED_ORIGIN}/embed/movie?imdb=${encodeURIComponent(imdbId)}`;
+    const normalizedTmdbId = encodeURIComponent(String(tmdbId));
+    if (type === "movie" && parsed.pathname.includes("/embed/movie")) {
+      return `${VSEMBED_ORIGIN}/embed/movie/${normalizedTmdbId}`;
+    }
+    if (type !== "movie" && parsed.pathname.includes("/embed/tv")) {
+      const s = season && season > 0 ? season : 1;
+      const e = episode && episode > 0 ? episode : 1;
+      return `${VSEMBED_ORIGIN}/embed/tv/${normalizedTmdbId}/${s}-${e}`;
     }
     return `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
@@ -54,34 +67,30 @@ const buildVidSrcEmbed = (
   tmdbId: string | number,
   type: string,
   season?: number,
-  episode?: number,
-  imdbId?: string
+  episode?: number
 ): string => {
-  const normalizedImdbId = imdbId?.trim();
-  if (!tmdbId && !normalizedImdbId) return "";
+  if (!tmdbId) return "";
   const embedBase = normalizeEmbedBase(process.env.VIDSRC_BASE || VSEMBED_ORIGIN);
   const movieTemplate =
     process.env.VIDSRC_MOVIE_URL_TEMPLATE ||
     process.env.EMBED_MOVIE_URL_TEMPLATE ||
-    (normalizedImdbId
-      ? `${embedBase}/embed/movie?imdb={imdbId}`
-      : `${embedBase}/embed/movie?tmdb={tmdbId}`);
+    `${embedBase}/embed/movie/{tmdbId}`;
   const tvTemplate =
     process.env.VIDSRC_TV_URL_TEMPLATE ||
     process.env.EMBED_TV_URL_TEMPLATE ||
-    `${embedBase}/embed/tv?tmdb={tmdbId}&season={season}&episode={episode}`;
+    `${embedBase}/embed/tv/{tmdbId}/{season}-{episode}`;
   const template = type === "movie" ? movieTemplate : tvTemplate;
   const s = season && season > 0 ? season : 1;
   const e = episode && episode > 0 ? episode : 1;
   const embedUrl = template
     .replace(/\{tmdbId\}|\{tmdb_id\}/g, encodeURIComponent(String(tmdbId)))
-    .replace(/\{imdbId\}|\{imdb_id\}/g, encodeURIComponent(String(normalizedImdbId || "")))
     .replace(/\{season\}/g, encodeURIComponent(String(s)))
     .replace(/\{episode\}/g, encodeURIComponent(String(e)));
-  return normalizeManagedEmbedUrl(embedUrl, type, normalizedImdbId);
+  return normalizeManagedEmbedUrl(embedUrl, type, tmdbId, s, e);
 };
 
 const AUTO_EMBED_HOSTS = [
+  "vidsrc.me",
   "vidsrc.sbs",
   "web.nxsha.app",
   "cinesrc.st",
@@ -233,8 +242,7 @@ class MovieController {
           movie.tmdb.id,
           isMovie ? "movie" : "tv",
           season?.season_number || 1,
-          episode.episode || 1,
-          movie.imdb?.id
+          episode.episode || 1
         );
         if (
           expectedEmbedUrl &&

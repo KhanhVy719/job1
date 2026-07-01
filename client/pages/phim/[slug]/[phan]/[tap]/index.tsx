@@ -134,13 +134,9 @@ interface EmbedServerOption {
   url: string;
 }
 
-interface EmbedMovieIdentifiers {
-  tmdbId?: string;
-  imdbId?: string;
-}
-
 const VSEMBED_ORIGIN = (process.env.NEXT_PUBLIC_VSEMBED_ORIGIN || "https://vsembed.su").replace(/\/$/, "");
 const VSEMBED_LEGACY_HOSTS = new Set([
+  "vidsrc.me",
   "vidsrc-embed.ru",
   "vidsrc-embed.su",
   "vidsrcme.su",
@@ -149,24 +145,18 @@ const VSEMBED_LEGACY_HOSTS = new Set([
   "vsembed.su",
 ]);
 
-const buildVsembedMovieUrl = ({ tmdbId, imdbId }: EmbedMovieIdentifiers) => {
-  const normalizedImdbId = imdbId?.trim();
-  if (normalizedImdbId) {
-    return `${VSEMBED_ORIGIN}/embed/movie?imdb=${encodeURIComponent(normalizedImdbId)}`;
-  }
-  if (tmdbId) {
-    return `${VSEMBED_ORIGIN}/embed/movie?tmdb=${tmdbId}`;
-  }
-  return "";
-};
+const buildVsembedMovieUrl = (tmdbId: string) =>
+  tmdbId ? `${VSEMBED_ORIGIN}/embed/movie/${tmdbId}` : "";
+
+const buildVsembedTvUrl = (tmdbId: string, season: number, episode: number) =>
+  tmdbId ? `${VSEMBED_ORIGIN}/embed/tv/${tmdbId}/${season}-${episode}` : "";
 
 const EMBED_PROVIDERS = [
   {
     id: "vsembed",
     label: "VSEmbed",
     movie: buildVsembedMovieUrl,
-    tv: (tmdbId: string, season: number, episode: number) =>
-      `${VSEMBED_ORIGIN}/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`,
+    tv: buildVsembedTvUrl,
   },
 ];
 
@@ -183,17 +173,22 @@ const getUrlOrigin = (url: string) => {
 
 const normalizeEmbedUrl = (
   url: string,
-  options?: { isMovie?: boolean; tmdbId?: string | number; imdbId?: string }
+  options?: { isMovie?: boolean; tmdbId?: string | number; season?: number; episode?: number }
 ) => {
   if (!url) return "";
   try {
     const parsed = new URL(url);
     if (VSEMBED_LEGACY_HOSTS.has(parsed.hostname.toLowerCase())) {
-      if (options?.isMovie && parsed.pathname.includes("/embed/movie")) {
-        return buildVsembedMovieUrl({
-          tmdbId: options.tmdbId ? encodeURIComponent(String(options.tmdbId)) : undefined,
-          imdbId: options.imdbId,
-        });
+      const normalizedTmdbId = options?.tmdbId ? encodeURIComponent(String(options.tmdbId)) : "";
+      if (normalizedTmdbId && parsed.pathname.includes("/embed/movie")) {
+        return buildVsembedMovieUrl(normalizedTmdbId);
+      }
+      if (!options?.isMovie && normalizedTmdbId && parsed.pathname.includes("/embed/tv")) {
+        return buildVsembedTvUrl(
+          normalizedTmdbId,
+          options.season || 1,
+          options.episode || 1
+        );
       }
       return `${VSEMBED_ORIGIN}${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
@@ -359,39 +354,34 @@ const XemPhim: NextPage<IPageProps> = (props) => {
 
   const embedServerOptions = useMemo<EmbedServerOption[]>(() => {
     const tmdbId = movie?.tmdb?.id;
-    const imdbId = movie?.imdb?.id;
-    if (!currentEpData) {
+    if (!tmdbId || !currentEpData) {
       return [];
     }
 
     const isMovie = movie.type === "movie" || movie.tmdb?.type === "movie";
-    if ((isMovie && !tmdbId && !imdbId) || (!isMovie && !tmdbId)) {
-      return [];
-    }
-
+    const normalizedTmdbId = tmdbId ? encodeURIComponent(String(tmdbId)) : "";
+    const seasonNumber = currentSeason?.season_number || 1;
+    const episodeNumber = currentEpData.episode || 1;
     const episodeEmbedUrl = normalizeEmbedUrl(currentEpData.embed_url || "", {
       isMovie,
       tmdbId,
-      imdbId,
+      season: seasonNumber,
+      episode: episodeNumber,
     });
     if (episodeEmbedUrl) {
       return [{ id: "vsembed-episode", label: "VSEmbed", url: episodeEmbedUrl }];
     }
 
-    const normalizedTmdbId = tmdbId ? encodeURIComponent(String(tmdbId)) : "";
-    const seasonNumber = currentSeason?.season_number || 1;
-    const episodeNumber = currentEpData.episode || 1;
     return EMBED_PROVIDERS.map((provider) => ({
       id: provider.id,
       label: provider.label,
       url: isMovie
-        ? provider.movie({ tmdbId: normalizedTmdbId, imdbId })
+        ? provider.movie(normalizedTmdbId)
         : provider.tv(normalizedTmdbId, seasonNumber, episodeNumber),
     })).filter((option) => !!option.url);
   }, [
     currentEpData,
     currentSeason?.season_number,
-    movie?.imdb?.id,
     movie?.tmdb?.id,
     movie?.tmdb?.type,
     movie?.type,
