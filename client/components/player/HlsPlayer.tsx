@@ -39,6 +39,40 @@ interface HlsPlayerProps {
 
 const SUB_OFF = -1;
 
+const withViewerToken = async (source: ResolvedSource): Promise<string> => {
+  if (!source.host || !/([?&]token=|__TOKEN(PG)?__)/i.test(source.url)) {
+    return source.url;
+  }
+
+  try {
+    const response = await fetch(`https://${source.host}/generate.php`, {
+      cache: "no-store",
+      mode: "cors",
+    });
+    if (!response.ok) return source.url;
+
+    const token = (await response.text()).trim();
+    if (!token) return source.url;
+
+    const updatedUrl = source.url.replace(/__TOKENPG__|__TOKEN__/g, token);
+    try {
+      const parsed = new URL(updatedUrl);
+      if (parsed.searchParams.has("token")) {
+        parsed.searchParams.set("token", token);
+        return parsed.toString();
+      }
+      return updatedUrl;
+    } catch {
+      return updatedUrl.replace(
+        /([?&]token=)[^&#]+/i,
+        `$1${encodeURIComponent(token)}`
+      );
+    }
+  } catch {
+    return source.url;
+  }
+};
+
 const HlsPlayer: React.FC<HlsPlayerProps> = ({
   slug,
   episodeSlug,
@@ -129,6 +163,8 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !activeSource?.url) return;
+    let cancelled = false;
+    let currentHls: Hls | null = null;
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -139,75 +175,83 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     setLevels([]);
     setCurrentLevel(-1);
 
-    const streamUrl = activeSource.url;
-    const canPlayNative = video.canPlayType("application/vnd.apple.mpegurl");
+    void (async () => {
+      const streamUrl = await withViewerToken(activeSource);
+      if (cancelled) return;
 
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-      });
-      hlsRef.current = hls;
+      const canPlayNative = video.canPlayType("application/vnd.apple.mpegurl");
 
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+        });
+        currentHls = hls;
+        hlsRef.current = hls;
 
-      hls.on(Hls.Events.MANIFEST_PARSED, (_event, manifest) => {
-        setLevels(
-          manifest.levels.map((level, index) => ({
-            height: level.height || 0,
-            index,
-          }))
-        );
-        onReady?.();
-        if (autoPlay) {
-          void video.play().catch(() => undefined);
-        }
-      });
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
 
-      hls.on(Hls.Events.ERROR, (_event, errorData) => {
-        if (!errorData.fatal) return;
-
-        if (errorData.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          hls.recoverMediaError();
-          return;
-        }
-
-        const retryKey = `${serverIndex}:${streamUrl}`;
-        const retryCount = fatalRetryRef.current[retryKey] || 0;
-
-        if (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < 1) {
-          fatalRetryRef.current[retryKey] = retryCount + 1;
-          refreshResolvedSource();
-          return;
-        }
-
-        if (serverIndex + 1 < sources.length) {
-          tryNextServer();
-          return;
-        }
-
-        setError("Khong phat duoc nguon HLS hien tai.");
-      });
-    } else if (canPlayNative) {
-      video.src = streamUrl;
-      video.addEventListener(
-        "loadedmetadata",
-        () => {
+        hls.on(Hls.Events.MANIFEST_PARSED, (_event, manifest) => {
+          setLevels(
+            manifest.levels.map((level, index) => ({
+              height: level.height || 0,
+              index,
+            }))
+          );
           onReady?.();
           if (autoPlay) {
             void video.play().catch(() => undefined);
           }
-        },
-        { once: true }
-      );
-    } else {
-      setError("Trinh duyet khong ho tro HLS.");
-    }
+        });
+
+        hls.on(Hls.Events.ERROR, (_event, errorData) => {
+          if (!errorData.fatal) return;
+
+          if (errorData.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+            return;
+          }
+
+          const retryKey = `${serverIndex}:${activeSource.url}`;
+          const retryCount = fatalRetryRef.current[retryKey] || 0;
+
+          if (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < 1) {
+            fatalRetryRef.current[retryKey] = retryCount + 1;
+            refreshResolvedSource();
+            return;
+          }
+
+          if (serverIndex + 1 < sources.length) {
+            tryNextServer();
+            return;
+          }
+
+          setError("Khong phat duoc nguon HLS hien tai.");
+        });
+      } else if (canPlayNative) {
+        video.src = streamUrl;
+        video.addEventListener(
+          "loadedmetadata",
+          () => {
+            onReady?.();
+            if (autoPlay) {
+              void video.play().catch(() => undefined);
+            }
+          },
+          { once: true }
+        );
+      } else {
+        setError("Trinh duyet khong ho tro HLS.");
+      }
+    })();
 
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
+      cancelled = true;
+      if (currentHls) {
+        currentHls.destroy();
+      }
+      if (hlsRef.current === currentHls) {
         hlsRef.current = null;
       }
     };
