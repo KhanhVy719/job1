@@ -40,8 +40,11 @@ interface HlsPlayerProps {
 
 const SUB_OFF = -1;
 
-const withViewerToken = async (source: ResolvedSource): Promise<string> => {
-  if (source.proxy_url) {
+const withViewerToken = async (
+  source: ResolvedSource,
+  useProxyFallback: boolean
+): Promise<string> => {
+  if (useProxyFallback && source.proxy_url) {
     return axiosInstance.resolveURL(source.proxy_url);
   }
 
@@ -100,6 +103,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
   const [levels, setLevels] = useState<{ height: number; index: number }[]>([]);
   const [currentLevel, setCurrentLevel] = useState(-1);
   const [showSettings, setShowSettings] = useState(false);
+  const [useProxyFallback, setUseProxyFallback] = useState(false);
 
   useEffect(() => {
     if (!slug || !episodeSlug) return;
@@ -112,6 +116,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     setSubIndex(SUB_OFF);
     setLevels([]);
     setCurrentLevel(-1);
+    setUseProxyFallback(false);
 
     (async () => {
       try {
@@ -181,7 +186,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     setCurrentLevel(-1);
 
     void (async () => {
-      const streamUrl = await withViewerToken(activeSource);
+      const streamUrl = await withViewerToken(activeSource, useProxyFallback);
       if (cancelled) return;
 
       const canPlayNative = video.canPlayType("application/vnd.apple.mpegurl");
@@ -220,6 +225,11 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
 
           const retryKey = `${serverIndex}:${activeSource.url}`;
           const retryCount = fatalRetryRef.current[retryKey] || 0;
+
+          if (!useProxyFallback && activeSource.proxy_url) {
+            setUseProxyFallback(true);
+            return;
+          }
 
           if (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < 1) {
             fatalRetryRef.current[retryKey] = retryCount + 1;
@@ -262,12 +272,14 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
     };
   }, [
     activeSource?.url,
+    activeSource?.proxy_url,
     autoPlay,
     onReady,
     refreshResolvedSource,
     serverIndex,
     sources.length,
     tryNextServer,
+    useProxyFallback,
   ]);
 
   useEffect(() => {
@@ -288,6 +300,7 @@ const HlsPlayer: React.FC<HlsPlayerProps> = ({
 
   const switchServer = useCallback((index: number) => {
     setServerIndex(index);
+    setUseProxyFallback(false);
     setShowSettings(false);
   }, []);
 
