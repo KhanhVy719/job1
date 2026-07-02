@@ -34,6 +34,7 @@
     "express-rate-limit": "^8.2.1",
     "from": "^0.1.7",
     "ghost-cursor": "^1.4.1",
+    "iconv-lite": "^0.7.2",
     "import": "^0.0.6",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.0",

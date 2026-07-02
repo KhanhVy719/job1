@@ -11,11 +11,55 @@ import {
 } from "../Shared/shared";
 import ViewerTranslationService, { resolveViewerLanguage } from "../../services/ViewerTranslationService";
 import VseResolver from "../../services/VseResolver";
+import SubtitleService from "../../services/SubtitleService";
+import { getApiKey } from "../../plugin/crawler/api";
 
 const vseResolver = new VseResolver();
+const subtitleService = new SubtitleService();
 interface IFrontendEpisode extends Omit<LeanDocument<IEpisode>, "type"> {
   type: string;
 }
+
+/**
+ * Base tuyệt đối cho endpoint proxy phụ đề (track <track src> cần URL đầy đủ, cùng gốc API).
+ * Ưu tiên PUBLIC_API_BASE (khi sau reverse proxy/Caddy), sau đó suy từ header request.
+ */
+const apiBaseFromReq = (req: Request): string => {
+  const configured = (process.env.PUBLIC_API_BASE || "").replace(/\/+$/, "");
+  if (configured) return `${configured}/api/v1`;
+  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
+  const host = (req.headers["x-forwarded-host"] as string) || req.get("host") || "";
+  return `${proto}://${host}/api/v1`;
+};
+
+/**
+ * Lấy IMDB id từ TMDB external_ids khi DB thiếu (phim crawl trước fix persist imdb.id).
+ * Có id thì persist ngược vào Movie để lần sau khỏi gọi lại TMDB. Lỗi thì trả rỗng (sub là bonus).
+ */
+const ensureImdbId = async (
+  movie: any,
+  tmdbId: string | number,
+  isTv: boolean
+): Promise<string> => {
+  const existing = movie?.imdb?.id;
+  if (existing) return existing;
+  if (!tmdbId) return "";
+  try {
+    const type = isTv ? "tv" : "movie";
+    const { data } = await axios.get(
+      `https://api.themoviedb.org/3/${type}/${tmdbId}/external_ids`,
+      { params: { api_key: getApiKey() }, timeout: 15_000 }
+    );
+    const imdbId = data?.imdb_id;
+    if (imdbId) {
+      Movie.updateOne({ _id: movie._id }, { $set: { imdb: { id: imdbId } } }).exec();
+      return imdbId;
+    }
+  } catch {
+    /* bỏ qua — không lấy được thì không có sub OpenSubtitles */
+  }
+  return "";
+};
 
 const HLS_PROXY_SECRET =
   process.env.HLS_PROXY_SECRET ||
@@ -445,6 +489,46 @@ class MovieController {
         episodeNumber
       );
 
+      // Phụ đề từ OpenSubtitles theo IMDB id (vsembed không còn nhúng sub inline).
+      // Băng thông file sub đẩy về CLIENT: trả thẳng URL .gz gốc (dl.opensubtitles.org
+      // có Access-Control-Allow-Origin: *), client tự gunzip bằng DecompressionStream +
+      // convert SRT->VTT. fallbackUrl là proxy nội bộ cho browser cũ không có DecompressionStream.
+      const imdbId = await ensureImdbId(movie, tmdbId, !isMovie);
+      let osSubs: Array<{
+        language: string;
+        label: string;
+        url: string;
+        encoding?: string;
+        format?: string;
+        gz?: boolean;
+        fallbackUrl?: string;
+      }> = [];
+      if (imdbId) {
+        try {
+          const apiBase = apiBaseFromReq(req);
+          const entries = await subtitleService.list(
+            imdbId,
+            isMovie ? "movie" : "tv",
+            seasonNumber,
+            episodeNumber
+          );
+          osSubs = entries.map((s) => {
+            const qs = new URLSearchParams({ enc: s.encoding || "" });
+            return {
+              language: s.language,
+              label: s.label,
+              url: `https://dl.opensubtitles.org/en/download/file/${s.fileId}.gz`,
+              encoding: s.encoding || "",
+              format: s.format || "srt",
+              gz: true,
+              fallbackUrl: `${apiBase}/subtitle/${s.fileId}.vtt?${qs.toString()}`,
+            };
+          });
+        } catch {
+          /* sub là bonus, lỗi thì bỏ qua */
+        }
+      }
+
       if (resolved.status !== "ok" || !resolved.sources.length) {
         return res.json({
           status: true,
@@ -454,7 +538,7 @@ class MovieController {
             embed_url: fallbackEmbed,
             reason: resolved.reason || "no-sources",
             sources: [],
-            subtitles: resolved.subtitles || [],
+            subtitles: [...(resolved.subtitles || []), ...osSubs],
           },
         });
       }
@@ -476,7 +560,7 @@ class MovieController {
               ? { proxy_url: buildHlsProxyPath(source.url) }
               : {}),
           })),
-          subtitles: [...dbSubtitles, ...resolved.subtitles],
+          subtitles: [...dbSubtitles, ...resolved.subtitles, ...osSubs],
           poster: resolved.poster,
           embed_url: fallbackEmbed,
           resolvedAt: resolved.resolvedAt,
@@ -488,6 +572,30 @@ class MovieController {
         status: false,
         message: "Loi resolve nguon phim",
       });
+    }
+  };
+
+  /**
+   * Proxy phụ đề: tải file .gz từ OpenSubtitles, gunzip + decode + convert sang WEBVTT,
+   * trả text/vtt cho <track>. Browser không tự gunzip .gz và bị CORS nên phải qua đây.
+   */
+  static subtitleVtt = async (req: Request, res: Response) => {
+    const { fileId } = req.params;
+    const enc = typeof req.query.enc === "string" ? req.query.enc : undefined;
+
+    try {
+      const vtt = await subtitleService.toVtt(fileId, enc);
+      if (!vtt) {
+        return res.status(404).type("text/plain").send("subtitle-not-found");
+      }
+      res.setHeader("Content-Type", "text/vtt; charset=utf-8");
+      // Sub ít đổi — cache mạnh để giảm tải OpenSubtitles.
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      return res.send(vtt);
+    } catch (e) {
+      console.error(e);
+      return res.status(500).type("text/plain").send("subtitle-error");
     }
   };
 
